@@ -1,0 +1,901 @@
+import 'dart:async';
+
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/material.dart';
+import 'package:psf_publinfo/firebase_options.dart';
+
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  try {
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+    final auth = FirebaseAuth.instance;
+    if (auth.currentUser == null) await auth.signInAnonymously();
+    runApp(PublinfoApp(firestore: FirebaseFirestore.instance));
+  } catch (error) {
+    runApp(
+      MaterialApp(
+        home: Scaffold(
+          body: Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: SelectableText(
+                'No fue posible conectar con firebase. /n$error/n Revisa firebase_options.dart, Autentication y la conexion a intenet',
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// MODELOS: cada clase representa una entidad del dominio.
+class Boletin {
+  final String id, titulo, resumen, zona, categoria, autorId;
+  final DateTime fecha;
+
+  const Boletin({
+    required this.id,
+    required this.titulo,
+    required this.resumen,
+    required this.zona,
+    required this.categoria,
+    this.autorId = '',
+    required this.fecha,
+  });
+  factory Boletin.fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
+    final d = doc.data()!;
+    return Boletin(
+      id: doc.id,
+      titulo: d['titulo'] as String? ?? '',
+      resumen: d['resumen'] as String? ?? '',
+      zona: d['zona'] as String? ?? '',
+      categoria: d['categoria'] as String? ?? '',
+      autorId: d['autorId'] as String? ?? '',
+      fecha:
+          (d['fecha'] as Timestamp?)?.toDate() ??
+          DateTime.fromMicrosecondsSinceEpoch(0),
+    );
+  }
+}
+
+class Comercio {
+  final String id, nombre, direccion, zona, categoria, telefono, autorId;
+
+  const Comercio({
+    required this.id,
+    required this.nombre,
+    required this.direccion,
+    required this.zona,
+    required this.categoria,
+    required this.telefono,
+    this.autorId = '',
+  });
+  factory Comercio.fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
+    final d = doc.data()!;
+    return Comercio(
+      id: doc.id,
+      nombre: d['nombre'] as String? ?? '',
+      direccion: d['direccion'] as String? ?? '',
+      zona: d['zona'] as String? ?? '',
+      categoria: d['categoria'] as String? ?? '',
+      telefono: d['telefono'] as String? ?? '',
+      autorId: d['autorId'] as String? ?? '',
+    );
+  }
+}
+
+class Anuncio {
+  final String id;
+  final String comercioId;
+  final String titulo;
+  final String descripcion;
+  final DateTime fecha;
+  final String autorId;
+
+  const Anuncio({
+    required this.id,
+    required this.comercioId,
+    required this.titulo,
+    required this.descripcion,
+    required this.fecha,
+    this.autorId = '',
+  });
+  factory Anuncio.fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
+    final d = doc.data()!;
+    return Anuncio(
+      id: doc.id,
+      comercioId: d['comercioId'] as String? ?? '',
+      titulo: d['titulo'] as String? ?? '',
+      descripcion: d['descripcion'] as String? ?? '',
+      fecha:
+          (d['fecha'] as Timestamp?)?.toDate() ??
+          DateTime.fromMicrosecondsSinceEpoch(0),
+      autorId: d['autorId'] as String? ?? '',
+    );
+  }
+}
+
+// ESTADO COMPARTIDO: encapsula listas y operaciones del proyecto.
+class PublinfoStore extends ChangeNotifier {
+  PublinfoStore(this._firestore) {
+    _boletinesSub = _firestore
+        .collection('boletines')
+        .snapshots()
+        .listen(_cargarBoletines, onError: _registrarError);
+    _comerciosSub = _firestore
+        .collection('comercios')
+        .snapshots()
+        .listen(_cargarComercios, onError: _registrarError);
+    _anunciosSub = _firestore
+        .collection('anuncios')
+        .snapshots()
+        .listen(_cargarAnuncios, onError: _registrarError);
+  }
+
+  final FirebaseFirestore _firestore;
+  final List<Boletin> _boletines = [];
+  final List<Comercio> _comercios = [];
+  final List<Anuncio> _anuncios = [];
+  late final StreamSubscription<QuerySnapshot<Map<String, dynamic>>>
+  _boletinesSub;
+  late final StreamSubscription<QuerySnapshot<Map<String, dynamic>>>
+  _comerciosSub;
+  late final StreamSubscription<QuerySnapshot<Map<String, dynamic>>>
+  _anunciosSub;
+
+  List<Boletin> get boletines => List.unmodifiable(_boletines);
+  List<Comercio> get comercios => List.unmodifiable(_comercios);
+  List<Anuncio> get anuncios => List.unmodifiable(_anuncios);
+
+  void _registrarError(Object error) {
+    debugPrint('Error de Firestore: $error');
+  }
+
+  void _cargarBoletines(QuerySnapshot<Map<String, dynamic>> snapshot) {
+    _boletines
+      ..clear()
+      ..addAll(snapshot.docs.map(Boletin.fromDoc));
+    _boletines.sort((a, b) => b.fecha.compareTo(a.fecha));
+    notifyListeners();
+  }
+
+  void _cargarComercios(QuerySnapshot<Map<String, dynamic>> snapshot) {
+    _comercios
+      ..clear()
+      ..addAll(snapshot.docs.map(Comercio.fromDoc));
+    _comercios.sort((a, b) => a.nombre.compareTo(b.nombre));
+    notifyListeners();
+  }
+
+  void _cargarAnuncios(QuerySnapshot<Map<String, dynamic>> snapshot) {
+    _anuncios
+      ..clear()
+      ..addAll(snapshot.docs.map(Anuncio.fromDoc));
+    _anuncios.sort((a, b) => b.fecha.compareTo(a.fecha));
+    notifyListeners();
+  }
+
+  Comercio? buscarComercio(String id) {
+    for (final comercio in _comercios) {
+      if (comercio.id == id) return comercio;
+    }
+    return null;
+  }
+
+  String get _uid {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null || uid.isEmpty) {
+      throw StateError('No hay una sesión autenticada.');
+    }
+    return uid;
+  }
+
+  bool esPropietario(String autorId) =>
+      autorId.isNotEmpty && autorId == FirebaseAuth.instance.currentUser?.uid;
+
+  Future<void> agregarBoletin({
+    required String titulo,
+    required String resumen,
+    required String zona,
+    required String categoria,
+  }) async {
+    await _firestore.collection('boletines').add({
+      'titulo': titulo.trim(),
+      'resumen': resumen.trim(),
+      'zona': zona.trim(),
+      'categoria': categoria.trim(),
+      'autorId': _uid,
+      'fecha': FieldValue.serverTimestamp(),
+    });
+  }
+
+  Future<void> eliminarBoletin(String id) =>
+      _firestore.collection('boletines').doc(id).delete();
+
+  Future<void> agregarComercio({
+    required String nombre,
+    required String direccion,
+    required String zona,
+    required String categoria,
+    required String telefono,
+  }) async {
+    await _firestore.collection('comercios').add({
+      'nombre': nombre.trim(),
+      'direccion': direccion.trim(),
+      'zona': zona.trim(),
+      'categoria': categoria.trim(),
+      'telefono': telefono.trim(),
+      'autorId': _uid,
+    });
+  }
+
+  Future<void> eliminarComercio(String id) async {
+    final anuncios = await _firestore
+        .collection('anuncios')
+        .where('comercioId', isEqualTo: id)
+        .get();
+    if (anuncios.docs.isNotEmpty) {
+      final batch = _firestore.batch();
+      for (final doc in anuncios.docs) {
+        batch.delete(doc.reference);
+      }
+      await batch.commit();
+    }
+    await _firestore.collection('comercios').doc(id).delete();
+  }
+
+  Future<void> agregarAnuncio({
+    required String comercioId,
+    required String titulo,
+    required String descripcion,
+  }) async {
+    if (buscarComercio(comercioId) == null) {
+      throw ArgumentError('El comercio seleccionado no existe.');
+    }
+    await _firestore.collection('anuncios').add({
+      'comercioId': comercioId,
+      'titulo': titulo.trim(),
+      'descripcion': descripcion.trim(),
+      'fecha': FieldValue.serverTimestamp(),
+      'autorId': _uid,
+    });
+  }
+
+  Future<void> eliminarAnuncio(String id) =>
+      _firestore.collection('anuncios').doc(id).delete();
+
+  @override
+  void dispose() {
+    _boletinesSub.cancel();
+    _comerciosSub.cancel();
+    _anunciosSub.cancel();
+    super.dispose();
+  }
+}
+
+class PublinfoApp extends StatefulWidget {
+  final FirebaseFirestore firestore;
+  const PublinfoApp({super.key, required this.firestore});
+
+  @override
+  State<PublinfoApp> createState() => _PublinfoAppState();
+}
+
+class _PublinfoAppState extends State<PublinfoApp> {
+  late final PublinfoStore store = PublinfoStore(widget.firestore);
+
+  @override
+  void dispose() {
+    // libera almacenamineto de datos
+    store.dispose();
+    super.dispose(); // lleva la instruccion a la clase
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'PSF_Publinfo',
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: const Color(0xFF1565C0),
+          brightness: Brightness.dark,
+        ),
+        useMaterial3: true,
+      ),
+      home: HomeScreen(store: store),
+    );
+  }
+}
+
+class HomeScreen extends StatefulWidget {
+  final PublinfoStore store;
+  const HomeScreen({super.key, required this.store});
+
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  int _currentIndex = 0;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: IndexedStack(
+        index: _currentIndex,
+        children: [
+          BoletinesTab(store: widget.store),
+          AnunciosTab(store: widget.store),
+          ComerciosTab(store: widget.store),
+        ],
+      ),
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: _currentIndex,
+        onDestinationSelected: (index) => setState(() => _currentIndex = index),
+        destinations: const [
+          NavigationDestination(
+            icon: Icon(Icons.article_outlined),
+            selectedIcon: Icon(Icons.article),
+            label: 'Boletines',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.campaign_outlined),
+            selectedIcon: Icon(Icons.campaign),
+            label: 'Anuncios',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.storefront_outlined),
+            selectedIcon: Icon(Icons.storefront),
+            label: 'Comercios',
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+String fechaCorta(DateTime fecha) {
+  final local = fecha.toLocal();
+  String dos(int n) => n.toString().padLeft(2, '0');
+  return '${dos(local.day)}/${dos(local.month)}/${local.year} ${dos(local.hour)}:${dos(local.minute)}';
+}
+
+void mostrarDetalle(BuildContext context, String titulo, List<String> lineas) {
+  showDialog<void>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      title: Text(titulo),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            for (final linea in lineas)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: Text(linea),
+              ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(dialogContext),
+          child: const Text('Cerrar'),
+        ),
+      ],
+    ),
+  );
+}
+
+class BoletinesTab extends StatelessWidget {
+  final PublinfoStore store;
+  const BoletinesTab({super.key, required this.store});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Boletines locales')),
+      body: ListenableBuilder(
+        listenable: store,
+        builder: (context, _) {
+          final boletines = store.boletines;
+          if (boletines.isEmpty) {
+            return const Center(child: Text('Todavía no hay boletines.'));
+          }
+          return ListView.builder(
+            padding: const EdgeInsets.all(12),
+            itemCount: boletines.length,
+            itemBuilder: (context, index) {
+              final boletin = boletines[index];
+              return Card(
+                child: ListTile(
+                  isThreeLine: true,
+                  title: Text(boletin.titulo),
+                  subtitle: Text(
+                    '${boletin.categoria} · ${boletin.zona}\n${boletin.resumen}',
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  onTap: () => mostrarDetalle(context, boletin.titulo, [
+                    'Categoría: ${boletin.categoria}',
+                    'Zona: ${boletin.zona}',
+                    'Fecha: ${fechaCorta(boletin.fecha)}',
+                    boletin.resumen,
+                  ]),
+                  trailing: store.esPropietario(boletin.autorId)
+                      ? IconButton(
+                          tooltip: 'Eliminar boletín',
+                          icon: const Icon(Icons.delete_outline),
+                          onPressed: () => confirmarEliminacion(
+                            context,
+                            'boletín',
+                            () => store.eliminarBoletin(boletin.id),
+                          ),
+                        )
+                      : null,
+                ),
+              );
+            },
+          );
+        },
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => Navigator.push(
+          context,
+          MaterialPageRoute<void>(
+            builder: (_) => FormularioBoletin(store: store),
+          ),
+        ),
+        icon: const Icon(Icons.add),
+        label: const Text('Publicar'),
+      ),
+    );
+  }
+}
+
+class AnunciosTab extends StatelessWidget {
+  final PublinfoStore store;
+  const AnunciosTab({super.key, required this.store});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Anuncios publicitarios')),
+      body: ListenableBuilder(
+        listenable: store,
+        builder: (context, _) {
+          final anuncios = store.anuncios;
+          if (anuncios.isEmpty) {
+            return const Center(child: Text('Todavía no hay anuncios.'));
+          }
+          return ListView.builder(
+            padding: const EdgeInsets.all(12),
+            itemCount: anuncios.length,
+            itemBuilder: (context, index) {
+              final anuncio = anuncios[index];
+              final comercio = store.buscarComercio(anuncio.comercioId);
+              return Card(
+                child: ListTile(
+                  isThreeLine: true,
+                  title: Text(anuncio.titulo),
+                  subtitle: Text(
+                    '${comercio?.nombre ?? 'Comercio no disponible'}\n${anuncio.descripcion}',
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  onTap: () => mostrarDetalle(context, anuncio.titulo, [
+                    'Comercio: ${comercio?.nombre ?? 'No disponible'}',
+                    'Fecha: ${fechaCorta(anuncio.fecha)}',
+                    anuncio.descripcion,
+                  ]),
+                  trailing: store.esPropietario(anuncio.autorId)
+                      ? IconButton(
+                          tooltip: 'Eliminar anuncio',
+                          icon: const Icon(Icons.delete_outline),
+                          onPressed: () => confirmarEliminacion(
+                            context,
+                            'anuncio',
+                            () => store.eliminarAnuncio(anuncio.id),
+                          ),
+                        )
+                      : null,
+                ),
+              );
+            },
+          );
+        },
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () {
+          if (store.comercios.isEmpty) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Primero debes registrar un comercio.'),
+              ),
+            );
+            return;
+          }
+          Navigator.push(
+            context,
+            MaterialPageRoute<void>(
+              builder: (_) => FormularioAnuncio(store: store),
+            ),
+          );
+        },
+        icon: const Icon(Icons.add),
+        label: const Text('Anunciar'),
+      ),
+    );
+  }
+}
+
+class ComerciosTab extends StatelessWidget {
+  final PublinfoStore store;
+  const ComerciosTab({super.key, required this.store});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Comercios registrados')),
+      body: ListenableBuilder(
+        listenable: store,
+        builder: (context, _) {
+          final comercios = store.comercios;
+          if (comercios.isEmpty) {
+            return const Center(child: Text('Todavía no hay comercios.'));
+          }
+          return ListView.builder(
+            padding: const EdgeInsets.all(12),
+            itemCount: comercios.length,
+            itemBuilder: (context, index) {
+              final comercio = comercios[index];
+              return Card(
+                child: ListTile(
+                  isThreeLine: true,
+                  title: Text(comercio.nombre),
+                  subtitle: Text(
+                    '${comercio.categoria} · ${comercio.zona}\n${comercio.direccion}',
+                  ),
+                  onTap: () => mostrarDetalle(context, comercio.nombre, [
+                    'Categoría: ${comercio.categoria}',
+                    'Zona: ${comercio.zona}',
+                    'Dirección: ${comercio.direccion}',
+                    'Teléfono: ${comercio.telefono}',
+                  ]),
+                  trailing: store.esPropietario(comercio.autorId)
+                      ? IconButton(
+                          tooltip: 'Eliminar comercio',
+                          icon: const Icon(Icons.delete_outline),
+                          onPressed: () => confirmarEliminacion(
+                            context,
+                            'comercio',
+                            () => store.eliminarComercio(comercio.id),
+                          ),
+                        )
+                      : null,
+                ),
+              );
+            },
+          );
+        },
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => Navigator.push(
+          context,
+          MaterialPageRoute<void>(
+            builder: (_) => FormularioComercio(store: store),
+          ),
+        ),
+        icon: const Icon(Icons.add),
+        label: const Text('Registrar'),
+      ),
+    );
+  }
+}
+
+Future<void> confirmarEliminacion(
+  BuildContext context,
+  String tipo,
+  Future<void> Function() eliminar,
+) async {
+  final confirmado = await showDialog<bool>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      title: const Text('Confirmar eliminación'),
+      content: Text(
+        '¿Deseas eliminar este $tipo? Esta acción no se puede deshacer.',
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(dialogContext, false),
+          child: const Text('Cancelar'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(dialogContext, true),
+          child: const Text('Eliminar'),
+        ),
+      ],
+    ),
+  );
+  if (confirmado == true && context.mounted) {
+    try {
+      await eliminar();
+    } catch (error) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('No se pudo eliminar: $error')),
+        );
+      }
+    }
+  }
+}
+
+// Campo reutilizable con validación de espacios en blanco.
+class CampoTexto extends StatelessWidget {
+  final TextEditingController controller;
+  final String etiqueta;
+  final int maxLineas;
+  final TextInputType? teclado;
+
+  const CampoTexto({
+    super.key,
+    required this.controller,
+    required this.etiqueta,
+    this.maxLineas = 1,
+    this.teclado,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: TextFormField(
+        controller: controller,
+        maxLines: maxLineas,
+        keyboardType: teclado,
+        decoration: InputDecoration(
+          labelText: etiqueta,
+          border: const OutlineInputBorder(),
+        ),
+        validator: (valor) => valor == null || valor.trim().isEmpty
+            ? 'El campo $etiqueta es obligatorio'
+            : null,
+      ),
+    );
+  }
+}
+
+class FormularioBoletin extends StatefulWidget {
+  final PublinfoStore store;
+  const FormularioBoletin({super.key, required this.store});
+
+  @override
+  State<FormularioBoletin> createState() => _FormularioBoletinState();
+}
+
+class _FormularioBoletinState extends State<FormularioBoletin> {
+  final formKey = GlobalKey<FormState>();
+  final titulo = TextEditingController();
+  final resumen = TextEditingController();
+  final zona = TextEditingController();
+  final categoria = TextEditingController();
+
+  @override
+  void dispose() {
+    titulo.dispose();
+    resumen.dispose();
+    zona.dispose();
+    categoria.dispose();
+    super.dispose();
+  }
+
+  Future<void> guardar() async {
+    if (!formKey.currentState!.validate()) return;
+    try {
+      await widget.store.agregarBoletin(
+        titulo: titulo.text,
+        resumen: resumen.text,
+        zona: zona.text,
+        categoria: categoria.text,
+      );
+      if (mounted) Navigator.pop(context);
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('No se pudo guardar: $error')),
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Nuevo boletín')),
+      body: Form(
+        key: formKey,
+        child: ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            CampoTexto(controller: titulo, etiqueta: 'Título'),
+            CampoTexto(controller: resumen, etiqueta: 'Resumen', maxLineas: 4),
+            CampoTexto(controller: zona, etiqueta: 'Zona'),
+            CampoTexto(controller: categoria, etiqueta: 'Categoría'),
+            FilledButton(
+              onPressed: guardar,
+              child: const Text('Guardar boletín'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class FormularioComercio extends StatefulWidget {
+  final PublinfoStore store;
+  const FormularioComercio({super.key, required this.store});
+
+  @override
+  State<FormularioComercio> createState() => _FormularioComercioState();
+}
+
+class _FormularioComercioState extends State<FormularioComercio> {
+  final formKey = GlobalKey<FormState>();
+  final nombre = TextEditingController();
+  final direccion = TextEditingController();
+  final zona = TextEditingController();
+  final categoria = TextEditingController();
+  final telefono = TextEditingController();
+
+  @override
+  void dispose() {
+    nombre.dispose();
+    direccion.dispose();
+    zona.dispose();
+    categoria.dispose();
+    telefono.dispose();
+    super.dispose();
+  }
+
+  Future<void> guardar() async {
+    if (!formKey.currentState!.validate()) return;
+    try {
+      await widget.store.agregarComercio(
+        nombre: nombre.text,
+        direccion: direccion.text,
+        zona: zona.text,
+        categoria: categoria.text,
+        telefono: telefono.text,
+      );
+      if (mounted) Navigator.pop(context);
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('No se pudo guardar: $error')),
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Registrar comercio')),
+      body: Form(
+        key: formKey,
+        child: ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            CampoTexto(controller: nombre, etiqueta: 'Nombre'),
+            CampoTexto(controller: direccion, etiqueta: 'Dirección'),
+            CampoTexto(controller: zona, etiqueta: 'Zona'),
+            CampoTexto(controller: categoria, etiqueta: 'Categoría'),
+            CampoTexto(
+              controller: telefono,
+              etiqueta: 'Teléfono',
+              teclado: TextInputType.phone,
+            ),
+            FilledButton(
+              onPressed: guardar,
+              child: const Text('Guardar comercio'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class FormularioAnuncio extends StatefulWidget {
+  final PublinfoStore store;
+  const FormularioAnuncio({super.key, required this.store});
+
+  @override
+  State<FormularioAnuncio> createState() => _FormularioAnuncioState();
+}
+
+class _FormularioAnuncioState extends State<FormularioAnuncio> {
+  final formKey = GlobalKey<FormState>();
+  final titulo = TextEditingController();
+  final descripcion = TextEditingController();
+  String? comercioId;
+
+  @override
+  void dispose() {
+    titulo.dispose();
+    descripcion.dispose();
+    super.dispose();
+  }
+
+  Future<void> guardar() async {
+    if (!formKey.currentState!.validate()) return;
+    final id = comercioId;
+    if (id == null) return;
+    try {
+      await widget.store.agregarAnuncio(
+        comercioId: id,
+        titulo: titulo.text,
+        descripcion: descripcion.text,
+      );
+      if (mounted) Navigator.pop(context);
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('No se pudo guardar: $error')),
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Nuevo anuncio')),
+      body: Form(
+        key: formKey,
+        child: ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            DropdownButtonFormField<String>(
+              initialValue: comercioId,
+              isExpanded: true,
+              decoration: const InputDecoration(
+                labelText: 'Comercio',
+                border: OutlineInputBorder(),
+              ),
+              items: [
+                for (final comercio in widget.store.comercios)
+                  DropdownMenuItem(
+                    value: comercio.id,
+                    child: Text(comercio.nombre),
+                  ),
+              ],
+              onChanged: (valor) => setState(() => comercioId = valor),
+              validator: (valor) =>
+                  valor == null ? 'Selecciona un comercio' : null,
+            ),
+            const SizedBox(height: 14),
+            CampoTexto(controller: titulo, etiqueta: 'Título'),
+            CampoTexto(
+              controller: descripcion,
+              etiqueta: 'Descripción',
+              maxLineas: 4,
+            ),
+            FilledButton(
+              onPressed: guardar,
+              child: const Text('Guardar anuncio'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}

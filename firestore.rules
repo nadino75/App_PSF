@@ -1,0 +1,43 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() { return request.auth != null && request.auth.token.firebase.sign_in_provider != 'anonymous'; }
+    function admin() { return signedIn() && request.auth.token.get('admin', false) == true; }
+    function self(uid) { return signedIn() && request.auth.uid == uid; }
+    function owner(id) { return signedIn() && get(/databases/$(database)/documents/negocios/$(id)).data.duenoId == request.auth.uid; }
+    match /catalogo/{id} { allow read: if resource.data.publicado == true || admin() || owner(id); }
+    match /negocios/{id} {
+      allow read: if admin() || (signedIn() && resource.data.duenoId == request.auth.uid);
+      match /versiones/{version} { allow read: if admin() || owner(id); }
+    }
+    match /categorias/{id} { allow read: if true; }
+    match /anuncios/{id} { allow read: if resource.data.publicado == true || admin(); }
+    match /boletines/{id} { allow read: if resource.data.publicado == true || admin(); }
+    match /novedades/{id} { allow read: if signedIn(); }
+    match /solicitudes/{id} { allow read: if admin() || (signedIn() && resource.data.solicitanteId == request.auth.uid); }
+    match /historial/{id} { allow read: if admin() || (signedIn() && resource.data.solicitanteId == request.auth.uid); }
+    match /usuarios/{uid} {
+      allow read: if self(uid) || admin();
+      allow create: if self(uid) && request.resource.data.keys().hasOnly(['nombre'])
+        && request.resource.data.nombre is string && request.resource.data.nombre.size() > 0 && request.resource.data.nombre.size() <= 100;
+      allow update: if self(uid) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['nombre'])
+        && request.resource.data.nombre is string && request.resource.data.nombre.size() > 0 && request.resource.data.nombre.size() <= 100;
+      match /favoritos/{id} {
+        allow read, delete: if self(uid);
+        allow create: if self(uid) && request.resource.data.keys().hasOnly(['creado'])
+          && request.resource.data.creado == request.time
+          && get(/databases/$(database)/documents/catalogo/$(id)).data.publicado == true;
+      }
+      match /notificaciones/{id} {
+        allow read: if self(uid);
+        allow update: if self(uid) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['leida'])
+          && request.resource.data.leida is bool;
+      }
+      match /lecturas/{id} {
+        allow read: if self(uid);
+        allow create, update: if self(uid) && request.resource.data.keys().hasOnly(['leida']) && request.resource.data.leida == true;
+      }
+    }
+    match /{document=**} { allow read, write: if false; }
+  }
+}

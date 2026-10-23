@@ -1,0 +1,78 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function autenticado() { return request.auth != null; }
+    function propietario() { return autenticado() && resource.data.autorId == request.auth.uid; }
+    function camposValidos(campos) {
+      return request.resource.data.keys().hasOnly(campos);
+    }
+    function textoValido(campo, maximo) {
+      return request.resource.data[campo] is string
+        && request.resource.data[campo].size() > 0
+        && request.resource.data[campo].size() <= maximo;
+    }
+    function boletinValido() {
+      return camposValidos(['titulo','resumen','zona','categoria','fecha','autorId'])
+        && request.resource.data.keys().hasAll(['titulo','resumen','zona','categoria','fecha','autorId'])
+        && textoValido('titulo',150) && textoValido('resumen',1000)
+        && textoValido('zona',150) && textoValido('categoria',150)
+        && request.resource.data.fecha is timestamp;
+    }
+    function comercioValido() {
+      return camposValidos(['nombre','direccion','zona','categoria','telefono','autorId'])
+        && request.resource.data.keys().hasAll(['nombre','direccion','zona','categoria','telefono','autorId'])
+        && textoValido('nombre',150) && textoValido('direccion',150)
+        && textoValido('zona',150) && textoValido('categoria',150)
+        && textoValido('telefono',150);
+    }
+    function anuncioValido() {
+      return camposValidos(['titulo','descripcion','comercioId','fecha','autorId'])
+        && request.resource.data.keys().hasAll(['titulo','descripcion','comercioId','fecha','autorId'])
+        && textoValido('titulo',150) && textoValido('descripcion',1000)
+        && textoValido('comercioId',150)
+        && request.resource.data.fecha is timestamp
+        && exists(/databases/$(database)/documents/comercios/$(request.resource.data.comercioId));
+    }
+    function duenioComercio(comercioId) {
+      return autenticado()
+        && exists(/databases/$(database)/documents/comercios/$(comercioId))
+        && get(/databases/$(database)/documents/comercios/$(comercioId)).data.autorId == request.auth.uid;
+    }
+    match /boletines/{id} {
+      allow read: if autenticado();
+      allow create: if autenticado()
+        && request.resource.data.autorId == request.auth.uid
+        && request.resource.data.fecha == request.time
+        && boletinValido();
+      allow update: if propietario()
+        && request.resource.data.autorId == resource.data.autorId
+        && request.resource.data.fecha == resource.data.fecha
+        && boletinValido();
+      allow delete: if propietario();
+    }
+    match /comercios/{id} {
+      allow read: if autenticado();
+      allow create: if autenticado()
+        && request.resource.data.autorId == request.auth.uid
+        && comercioValido();
+      allow update: if propietario()
+        && request.resource.data.autorId == resource.data.autorId
+        && comercioValido();
+      allow delete: if propietario();
+    }
+    match /anuncios/{id} {
+      allow read: if autenticado();
+      allow create: if autenticado()
+        && request.resource.data.autorId == request.auth.uid
+        && request.resource.data.fecha == request.time
+        && anuncioValido();
+      allow update: if propietario()
+        && request.resource.data.autorId == resource.data.autorId
+        && request.resource.data.fecha == resource.data.fecha
+        && anuncioValido();
+      allow delete: if propietario() || duenioComercio(resource.data.comercioId);
+    }
+    match /{document=**} { allow read, write: if false; }
+  }
+}

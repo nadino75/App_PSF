@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "544200957193",
+    "project_id": "psf-publinfo001",
+    "storage_bucket": "psf-publinfo001.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:544200957193:android:cef7f012df75e0983dc7d8",
+        "android_client_info": {
+          "package_name": "com.example.psf_publinfo"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDCRWuGqbLQWTy01TQcCl5pdYWaoeeBOBU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
