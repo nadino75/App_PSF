@@ -33,10 +33,3 @@ flutter:
     - family: Fraunces
       fonts:
         - asset: assets/fonts/Fraunces.ttf
-  fonts:
-    - family: Manrope
-      fonts:
-        - asset: assets/fonts/Manrope.ttf
-    - family: Fraunces
-      fonts:
-        - asset: assets/fonts/Fraunces.ttf

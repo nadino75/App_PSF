@@ -55,6 +55,7 @@ class _AuthPageState extends State<AuthPage> {
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(title: const Text('Tu cuenta')),
     body: PageBody(
+      maxWidth: 560,
       children: [
         SectionTitle(
           recovery

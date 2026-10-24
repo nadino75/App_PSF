@@ -95,13 +95,14 @@ class _ActionButtonState extends State<ActionButton> {
 }
 
 class PageBody extends StatelessWidget {
-  const PageBody({super.key, required this.children});
+  const PageBody({super.key, required this.children, this.maxWidth = 1160});
   final List<Widget> children;
+  final double maxWidth;
   @override
   Widget build(BuildContext context) => Align(
     alignment: Alignment.topCenter,
     child: ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: 1160),
+      constraints: BoxConstraints(maxWidth: maxWidth),
       child: ListView(
         padding: EdgeInsets.all(
           MediaQuery.sizeOf(context).width < 600 ? 20 : 32,
@@ -151,7 +152,14 @@ class EmptyState extends StatelessWidget {
     padding: const EdgeInsets.symmetric(vertical: 48, horizontal: 16),
     child: Column(
       children: [
-        Container(padding: const EdgeInsets.all(22), decoration: const BoxDecoration(color: Color(0xFFECF0E5), shape: BoxShape.circle), child: Icon(icon, color: ink, size: 36)),
+        Container(
+          padding: const EdgeInsets.all(22),
+          decoration: const BoxDecoration(
+            color: Color(0xFFECF0E5),
+            shape: BoxShape.circle,
+          ),
+          child: Icon(icon, color: ink, size: 36),
+        ),
         const SizedBox(height: 16),
         Text(
           title,
@@ -223,10 +231,30 @@ Widget imageOrArt(
   double height = 180,
   IconData icon = Icons.storefront_outlined,
 }) {
-  final fallback = SizedBox(height: height, child: Stack(fit: StackFit.expand, children: [
-    NeighborhoodArt(variant: icon == Icons.local_cafe_outlined ? 0 : 1),
-    Positioned(bottom: 10, right: 10, child: Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), decoration: BoxDecoration(color: cream.withValues(alpha: .94), borderRadius: BorderRadius.circular(6)), child: const Text('Imagen ilustrativa', style: TextStyle(fontFamily: 'Manrope', fontSize: 9, color: ink)))),
-  ]));
+  final fallback = SizedBox(
+    height: height,
+    child: Stack(
+      fit: StackFit.expand,
+      children: [
+        NeighborhoodArt(variant: icon == Icons.local_cafe_outlined ? 0 : 1),
+        Positioned(
+          bottom: 10,
+          right: 10,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: cream.withValues(alpha: .94),
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: const Text(
+              'Imagen ilustrativa',
+              style: TextStyle(fontFamily: 'Manrope', fontSize: 9, color: ink),
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
   return ClipRRect(
     borderRadius: BorderRadius.circular(18),
     child: images.isEmpty

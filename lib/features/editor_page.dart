@@ -171,6 +171,7 @@ class _EditorPageState extends State<EditorPage> {
       ),
     ),
     body: PageBody(
+      maxWidth: 780,
       children: [
         SectionTitle(
           ad ? 'Comparte una novedad' : 'Dale un lugar a tu negocio',

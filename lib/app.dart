@@ -77,19 +77,48 @@ class _HomeShellState extends State<HomeShell> {
         appBar: AppBar(
           title: Row(
             children: [
-              Container(width: 38, height: 38, decoration: BoxDecoration(color: ink, borderRadius: BorderRadius.circular(12)), child: const Icon(Icons.storefront_rounded, size: 23, color: cream)),
+              Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: ink,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(
+                  Icons.storefront_rounded,
+                  size: 23,
+                  color: cream,
+                ),
+              ),
               const SizedBox(width: 12),
-              Expanded(child: Text(
-                'Vitrina Local',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: Theme.of(context).textTheme.titleLarge
-                    ?.copyWith(fontWeight: FontWeight.w800, color: ink, fontSize: 20),
-              )),
+              Expanded(
+                child: Text(
+                  'Vitrina Local',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.w800,
+                    color: ink,
+                    fontSize: 20,
+                  ),
+                ),
+              ),
             ],
           ),
           actions: [
-            if (wide) const Padding(padding: EdgeInsets.only(right: 24), child: Text('DESCUBRE. CONECTA. COMPRA LOCAL.', style: TextStyle(fontSize: 10, letterSpacing: 1.4, color: muted, fontWeight: FontWeight.w700))),
+            if (wide)
+              const Padding(
+                padding: EdgeInsets.only(right: 24),
+                child: Text(
+                  'DESCUBRE. CONECTA. COMPRA LOCAL.',
+                  style: TextStyle(
+                    fontSize: 10,
+                    letterSpacing: 1.4,
+                    color: muted,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
             if (r.account != null)
               IconButton(
                 tooltip: 'Notificaciones',
@@ -150,28 +179,49 @@ class _HomeShellState extends State<HomeShell> {
                 children: [
                   if (wide)
                     Container(
-                      decoration: const BoxDecoration(border: Border(right: BorderSide(color: line))),
+                      decoration: const BoxDecoration(
+                        border: Border(right: BorderSide(color: line)),
+                      ),
                       child: NavigationRail(
-                      extended: true,
-                      backgroundColor: cream,
-                      indicatorColor: const Color(0xFFE6EDDD),
-                      selectedLabelTextStyle: const TextStyle(fontFamily: 'Manrope', color: forest, fontWeight: FontWeight.w800),
-                      unselectedLabelTextStyle: const TextStyle(fontFamily: 'Manrope', color: muted),
-                      selectedIconTheme: const IconThemeData(color: forest),
-                      unselectedIconTheme: const IconThemeData(color: muted),
-                      minExtendedWidth: 208,
-                      leading: const Padding(padding: EdgeInsets.fromLTRB(24, 22, 24, 22), child: Text('EXPLORA TU COMUNIDAD', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w800, color: muted, letterSpacing: 1.4))),
-                      selectedIndex: index,
-                      onDestinationSelected: (i) =>
-                          setState(() => selected = i),
-                      destinations: [
-                        for (var i = 0; i < labels.length; i++)
-                          NavigationRailDestination(
-                            icon: Icon(icons[i]),
-                            label: Text(labels[i]),
+                        extended: true,
+                        backgroundColor: cream,
+                        indicatorColor: const Color(0xFFE6EDDD),
+                        selectedLabelTextStyle: const TextStyle(
+                          fontFamily: 'Manrope',
+                          color: forest,
+                          fontWeight: FontWeight.w800,
+                        ),
+                        unselectedLabelTextStyle: const TextStyle(
+                          fontFamily: 'Manrope',
+                          color: muted,
+                        ),
+                        selectedIconTheme: const IconThemeData(color: forest),
+                        unselectedIconTheme: const IconThemeData(color: muted),
+                        minExtendedWidth: 208,
+                        leading: const Padding(
+                          padding: EdgeInsets.fromLTRB(24, 22, 24, 22),
+                          child: Text(
+                            'EXPLORA TU COMUNIDAD',
+                            style: TextStyle(
+                              fontSize: 9,
+                              fontWeight: FontWeight.w800,
+                              color: muted,
+                              letterSpacing: 1.4,
+                            ),
                           ),
-                      ],
-                    )),
+                        ),
+                        selectedIndex: index,
+                        onDestinationSelected: (i) =>
+                            setState(() => selected = i),
+                        destinations: [
+                          for (var i = 0; i < labels.length; i++)
+                            NavigationRailDestination(
+                              icon: Icon(icons[i]),
+                              label: Text(labels[i]),
+                            ),
+                        ],
+                      ),
+                    ),
                   Expanded(child: content),
                 ],
               ),
@@ -182,8 +232,7 @@ class _HomeShellState extends State<HomeShell> {
             ? null
             : NavigationBar(
                 selectedIndex: index,
-                labelBehavior:
-                    NavigationDestinationLabelBehavior.onlyShowSelected,
+                labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
                 onDestinationSelected: (i) => setState(() => selected = i),
                 destinations: [
                   for (var i = 0; i < labels.length; i++)

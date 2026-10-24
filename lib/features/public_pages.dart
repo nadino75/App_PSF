@@ -43,7 +43,19 @@ class _CatalogPageState extends State<CatalogPage> {
     return PageBody(
       children: [
         if (!widget.favoritesOnly)
-          DiscoveryHero(onJoin: () => Navigator.push(context, MaterialPageRoute<void>(builder: (_) => Scaffold(appBar: AppBar(title: const Text('Tu espacio en Vitrina Local')), body: AccountPage(repository: r))))),
+          DiscoveryHero(
+            onJoin: () => Navigator.push(
+              context,
+              MaterialPageRoute<void>(
+                builder: (_) => Scaffold(
+                  appBar: AppBar(
+                    title: const Text('Tu espacio en Vitrina Local'),
+                  ),
+                  body: AccountPage(repository: r),
+                ),
+              ),
+            ),
+          ),
         SectionTitle(
           widget.favoritesOnly ? 'Tus favoritos' : 'Elige tu próxima parada',
           widget.favoritesOnly
@@ -54,31 +66,58 @@ class _CatalogPageState extends State<CatalogPage> {
           onChanged: (value) => setState(() => search = value.trim()),
           decoration: const InputDecoration(
             hintText: 'Buscar un negocio, producto o zona',
-            prefixIcon: Icon(Icons.search),
+            prefixIcon: Icon(Icons.search, color: forest),
           ),
         ),
         const SizedBox(height: 14),
-        Wrap(
-          spacing: 8,
-          runSpacing: 4,
-          children: [
-            ChoiceChip(
-              label: const Text('Todos'),
-              selected: category.isEmpty,
-              onSelected: (_) => setState(() => category = ''),
-            ),
-            for (final c in r.categories.where((c) => c.flag('activa')))
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            spacing: 8,
+            children: [
               ChoiceChip(
-                label: Text(c.text('nombre')),
-                selected: category == c.id,
-                onSelected: (_) => setState(() => category = c.id),
+                label: const Text('Todos'),
+                selected: category.isEmpty,
+                selectedColor: forest,
+                checkmarkColor: paper,
+                labelStyle: TextStyle(color: category.isEmpty ? paper : forest),
+                onSelected: (_) => setState(() => category = ''),
               ),
-          ],
+              for (final c in r.categories.where((c) => c.flag('activa')))
+                ChoiceChip(
+                  label: Text(c.text('nombre')),
+                  selected: category == c.id,
+                  selectedColor: forest,
+                  checkmarkColor: paper,
+                  labelStyle: TextStyle(
+                    color: category == c.id ? paper : forest,
+                  ),
+                  onSelected: (_) => setState(() => category = c.id),
+                ),
+            ],
+          ),
         ),
         const SizedBox(height: 22),
-        Text(
-          '${visible.length} negocios para descubrir',
-          style: const TextStyle(color: Color(0xFF67746C)),
+        Row(
+          children: [
+            const Icon(Icons.grid_view_rounded, size: 14, color: muted),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                '${visible.length} ${visible.length == 1 ? 'negocio para descubrir' : 'negocios para descubrir'}',
+                style: const TextStyle(color: muted, fontSize: 11),
+              ),
+            ),
+            const Text(
+              'DIRECTORIO LOCAL',
+              style: TextStyle(
+                color: muted,
+                fontSize: 8,
+                letterSpacing: 1.2,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
         ),
         const SizedBox(height: 14),
         if (visible.isEmpty && !r.loading)
@@ -129,7 +168,13 @@ class BusinessCard extends StatelessWidget {
   Widget build(BuildContext context) => BusinessTile(
     business: business,
     category: categoryName(repository, business.text('categoria')),
-    onTap: () => Navigator.push(context, MaterialPageRoute<void>(builder: (_) => BusinessDetail(repository: repository, business: business))),
+    onTap: () => Navigator.push(
+      context,
+      MaterialPageRoute<void>(
+        builder: (_) =>
+            BusinessDetail(repository: repository, business: business),
+      ),
+    ),
   );
 }
 
@@ -358,26 +403,26 @@ class PublicationCard extends StatelessWidget {
     item: item,
     ad: ad,
     onTap: () => Navigator.push(
-        context,
-        MaterialPageRoute<void>(
-          builder: (_) => Scaffold(
-            appBar: AppBar(title: Text(ad ? 'Anuncio' : 'Boletín')),
-            body: PageBody(
-              children: [
-                SectionTitle(
-                  item.text('titulo'),
-                  ad
-                      ? 'Vigente hasta ${item.text('vence').split('T').first}'
-                      : 'Vitrina Local · Comunidad',
-                ),
-                SelectableText(
-                  item.text('descripcion'),
-                  style: Theme.of(context).textTheme.bodyLarge,
-                ),
-              ],
-            ),
+      context,
+      MaterialPageRoute<void>(
+        builder: (_) => Scaffold(
+          appBar: AppBar(title: Text(ad ? 'Anuncio' : 'Boletín')),
+          body: PageBody(
+            children: [
+              SectionTitle(
+                item.text('titulo'),
+                ad
+                    ? 'Vigente hasta ${item.text('vence').split('T').first}'
+                    : 'Vitrina Local · Comunidad',
+              ),
+              SelectableText(
+                item.text('descripcion'),
+                style: Theme.of(context).textTheme.bodyLarge,
+              ),
+            ],
           ),
         ),
       ),
+    ),
   );
 }
