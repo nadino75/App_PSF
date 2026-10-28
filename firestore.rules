@@ -35,19 +35,25 @@ service cloud.firestore {
     // ===== USUARIOS =====
     match /usuarios/{uid} {
       allow create: if miDocumento(uid)
-        && request.resource.data.keys().hasOnly(['uid', 'nombre', 'email', 'telefono', 'ciudad', 'pais', 'fotoPerfil', 'rol', 'creado', 'actualizado'])
-        && request.resource.data.uid == uid
-        && request.resource.data.rol == 'usuario'
+        && request.resource.data.keys().hasAll(['nombre', 'email', 'creado'])
+        && request.resource.data.keys().hasOnly(['nombre', 'email', 'telefono', 'ciudad', 'pais', 'fotoPerfil', 'creado'])
         && texto(request.resource.data.nombre, 1, 100)
         && request.resource.data.email is string
         && request.resource.data.creado == request.time;
 
       allow read: if miDocumento(uid) || admin();
 
-      allow update: if miDocumento(uid) && !('rol' in request.resource.data.diff(resource.data).affectedKeys())
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['nombre', 'telefono', 'ciudad', 'pais', 'fotoPerfil', 'actualizado'])
-        && texto(request.resource.data.nombre, 1, 100)
-        && request.resource.data.actualizado == request.time;
+      allow update: if miDocumento(uid)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['nombre', 'telefono', 'ciudad', 'pais', 'fotoPerfil'])
+        && texto(request.resource.data.nombre, 1, 100);
+
+      allow create: if admin()
+        && request.resource.data.keys().hasOnly(['dueno'])
+        && request.resource.data.dueno == true;
+
+      allow update: if admin()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['dueno'])
+        && request.resource.data.dueno == true;
 
       allow delete: if false;
 
@@ -72,8 +78,16 @@ service cloud.firestore {
         allow delete: if miDocumento(uid);
       }
 
+      match /lecturas/{id} {
+        allow read: if miDocumento(uid);
+        allow create: if miDocumento(uid)
+          && request.resource.data.keys().hasOnly(['leida'])
+          && request.resource.data.leida == true;
+      }
+
       match /notificaciones/{id} {
         allow read: if miDocumento(uid);
+        allow create: if admin();
         allow update: if miDocumento(uid)
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['leida'])
           && request.resource.data.leida is bool;
@@ -111,18 +125,22 @@ service cloud.firestore {
         && texto(request.resource.data.telefono, 1, 20)
         && request.resource.data.actualizado == request.time;
 
+      allow create, update: if admin();
+
       allow delete: if false;
 
       match /versiones/{version} {
         allow read: if dueno() || admin();
-        allow create, update, delete: if false;
+        allow create: if admin();
+        allow update, delete: if false;
       }
     }
 
     // ===== CATÁLOGO =====
     match /catalogo/{id} {
-      allow read: if (resource.data.publicado == true && conectado()) || admin() || dueno();
-      allow create, update, delete: if false;
+      allow read: if resource.data.publicado == true || admin() || dueno();
+      allow create, update: if admin();
+      allow delete: if false;
     }
 
     // ===== ANUNCIOS =====
@@ -136,7 +154,7 @@ service cloud.firestore {
         && request.resource.data.negocioId is string
         && request.resource.data.publicado == false;
 
-      allow read: if (resource.data.publicado == true && conectado()) || admin() || propietario('duenoId');
+      allow read: if resource.data.publicado == true || admin() || propietario('duenoId');
 
       allow update: if propietario('duenoId') && autorInmutable()
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['titulo', 'descripcion', 'precio', 'imagen', 'publicado', 'actualizado'])
@@ -144,18 +162,20 @@ service cloud.firestore {
         && texto(request.resource.data.descripcion, 1, 1000)
         && request.resource.data.actualizado == request.time;
 
+      allow create, update: if admin();
+
       allow delete: if propietario('duenoId');
     }
 
     // ===== CATEGORÍAS =====
     match /categorias/{id} {
-      allow read: if conectado();
+      allow read: if true;
       allow create, update, delete: if admin();
     }
 
     // ===== BOLETINES =====
     match /boletines/{id} {
-      allow read: if conectado();
+      allow read: if resource.data.publicado == true || admin();
       allow create, update: if admin();
       allow delete: if false;
     }
@@ -177,14 +197,30 @@ service cloud.firestore {
         && request.resource.data.estado == 'pendiente'
         && request.resource.data.propuesta is map
         && request.resource.data.negocioId is string;
-      allow update: if admin();
+      allow update: if admin()
+        || (conectado()
+          && resource.data.solicitanteId == request.auth.uid
+          && resource.data.estado == 'pendiente'
+          && request.resource.data.estado == 'retirada'
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['estado', 'actualizado']));
       allow delete: if false;
+    }
+
+    // ===== AUDITORIA =====
+    match /auditoria/{id} {
+      allow create: if conectado()
+        && request.resource.data.keys().hasOnly(['userId', 'action', 'targetId', 'targetType', 'result', 'creado'])
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.creado == request.time;
+      allow read: if admin() || (conectado() && resource.data.userId == request.auth.uid);
+      allow update, delete: if false;
     }
 
     // ===== HISTORIAL =====
     match /historial/{id} {
       allow read: if conectado() && (resource.data.solicitanteId == request.auth.uid || admin());
-      allow create, update, delete: if false;
+      allow create: if admin();
+      allow update, delete: if false;
     }
 
     // ===== DENY ALL =====

@@ -3,7 +3,6 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
-import 'package:firebase_storage/firebase_storage.dart';
 
 import 'app.dart';
 import 'data/demo_repository.dart';
@@ -37,13 +36,12 @@ Future<void> main() async {
       await FirebaseAuth.instance.useAuthEmulator(host, 9099);
       FirebaseFirestore.instance.useFirestoreEmulator(host, 8080);
       FirebaseFunctions.instance.useFunctionsEmulator(host, 5001);
-      await FirebaseStorage.instance.useStorageEmulator(host, 9199);
       FirebaseFirestore.instance.settings = const Settings(
         persistenceEnabled: false,
       );
     }
     runApp(VitrinaApp(repository: FirebaseRepository()));
-  } catch (_) {
+  } catch (e) {
     runApp(
       MaterialApp(
         home: Scaffold(
@@ -58,9 +56,11 @@ Future<void> main() async {
                   const Text(
                     'No se pudo iniciar Firebase. Revisa la configuración y tu conexión.',
                   ),
+                  const SizedBox(height: 10),
+                  Text('Error: $e', textAlign: TextAlign.center, style: const TextStyle(fontSize: 12, color: Colors.grey)),
                   const SizedBox(height: 20),
                   FilledButton(
-                    onPressed: main,
+                    onPressed: () => main(),
                     child: const Text('Reintentar'),
                   ),
                 ],
