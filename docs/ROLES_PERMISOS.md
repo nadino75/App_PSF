@@ -7,11 +7,12 @@
 - Puede explorar catálogo público y ver anuncios
 - Puede marcar favoritos
 - Puede ver sus propias notificaciones y su auditoría personal
-- **NO puede**: Crear negocios, enviar solicitudes, editar nada, ver auditoría de otros
-- **Rol**: Solo observador del catálogo y anuncios
+- **PUEDE**: Enviar solicitud para crear su propio negocio (espera aprobación admin)
+- **NO puede**: Crear negocio sin aprobación, resolver solicitudes, ver auditoría global
+- **Rol**: Observador de catálogo, anuncios y solicitante de propiedad
 
 ### Dueño de Negocio
-- **Opción especial en registro**: Crea usuario + negocio simultáneamente
+- **Se obtiene por**: Aprobación de solicitud de creación de negocio por admin
 - Puede editar su propio negocio (mediante solicitudes de cambio)
 - Puede enviar cambios a su negocio para aprobación
 - Puede crear anuncios para su negocio
@@ -29,36 +30,40 @@
 - Puede ver auditoría global de todos los usuarios
 - Verificado con custom claim `admin: true` en Firebase Auth
 
-## Diferencia Clave: Usuario vs Dueño
+## Diferencia Clave: Usuario vs Dueño (OPCIÓN B - Solicitud)
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│ USUARIO REGULAR                                         │
+│ USUARIO REGULAR (TODOS comienzan aquí)                  │
 ├─────────────────────────────────────────────────────────┤
 │ • Ve catálogo público                                   │
 │ • Ve anuncios                                           │
 │ • Marca favoritos                                       │
 │ • Recibe notificaciones                                 │
-│ • NO puede crear ni poseer negocio                      │
-│ • NO puede enviar solicitudes                           │
+│ • PUEDE solicitar crear su negocio                      │
+│ • Espera aprobación del admin                           │
 └─────────────────────────────────────────────────────────┘
-
+                            ↓
+                    Envía solicitud de NEGOCIO
+                    (con datos del negocio)
+                            ↓
 ┌─────────────────────────────────────────────────────────┐
-│ DUEÑO DE NEGOCIO                                        │
+│ DUEÑO DE NEGOCIO (Después de aprobación)                │
 ├─────────────────────────────────────────────────────────┤
-│ • Posee UN negocio                                      │
+│ • Posee UN negocio (creado por admin al aprobar)        │
 │ • Puede actualizar datos del negocio                    │
 │ • Puede publicar anuncios                               │
-│ • Puede ver solicitudes pendientes                      │
+│ • Espera aprobación del admin para cambios              │
 │ • Ve catálogo y anuncios también                        │
 │ • NO puede crear más negocios                           │
-│ • NO puede aprobar solicitudes (solo admin)             │
+│ • NO puede aprobar solicitudes                          │
 └─────────────────────────────────────────────────────────┘
 ```
 
-**Opción en Registro:**
-- "Soy usuario" → Cuenta normal, solo ve ofertas
-- "Soy dueño de negocio" → Cuenta + Negocio automáticamente
+**Flujo de Registro (OPCIÓN B):**
+1. Todos se registran como USUARIOS normales
+2. Usuario que quiere negocio envía "Solicitud de negocio"
+3. Admin aprueba → Usuario pasa a ser DUEÑO + negocio creado
 
 ## Matriz de Permisos
 
@@ -69,7 +74,8 @@
 | Ver su propia auditoría | ✓ | ✓ | ✓ |
 | Ver auditoría global | ✗ | ✗ | ✓ |
 | Registrarse | ✓ | ✓ | ✓ |
-| **Crear negocio** | **✗** | **✓ (Al registro)** | ✓ |
+| **Solicitar crear negocio** | **✓ (espera aprobación)** | **✓** | ✓ |
+| **Crear negocio** | **✗ (solo aprobado)** | **✓ (por aprobación)** | ✓ |
 | Editar propio negocio | ✗ | ✓ | ✓ |
 | Enviar cambios a negocio | ✗ | ✓ | ✓ |
 | Crear anuncios para negocio | ✗ | ✓ | ✓ |
@@ -106,20 +112,49 @@ Se registran las siguientes acciones en Firestore (`/auditoria/{id}`):
 - Validación servidor-side: Cloud Functions registran antes de confirmar operación
 - Reglas Firestore: Lectura restringida a usuario dueño o admin
 
-## Flujo de Registro como Dueño
+## Flujo para Obtener Propiedad de Negocio (OPCIÓN B)
 
-1. Usuario toca "Registrarse como dueño" en signup
-2. Se abre formulario extendido con:
-   - Datos de persona: nombre, email, contraseña
-   - Datos de negocio: nombre, descripción, categoría, dirección, teléfono, horarios
-3. Cloud Function `registrarComoDueno` valida y crea atómicamente:
-   - Cuenta de usuario en Firebase Auth
-   - Documento de usuario con `dueno: true`
-   - Documento de negocio asignado al usuario
-   - Entrada en catálogo
-   - Versión inicial del negocio
-4. Usuario es auto-autenticado inmediatamente
-5. Se registra la acción en auditoría
+### Paso 1: Registro como Usuario Normal
+1. Usuario completa formulario de registro:
+   - Email
+   - Contraseña
+   - Nombre
+2. Cloud Function `registrarUsuario`:
+   - Crea cuenta en Firebase Auth
+   - Crea documento de usuario (sin `dueno: true`)
+3. Usuario es auto-autenticado
+4. Se registra "register" en auditoría
+
+### Paso 2: Solicitud de Creación de Negocio
+1. Usuario autenticado toca "Crear mi negocio"
+2. Completa formulario con:
+   - Nombre del negocio
+   - Descripción
+   - Categoría
+   - Dirección
+   - Teléfono
+   - Horarios
+3. Cloud Function `enviarSolicitud` con `tipo: "negocio"`:
+   - Valida que el usuario no tenga negocio ya
+   - Crea documento de solicitud con estado "pendiente"
+   - Se registra "submitRequest" en auditoría
+
+### Paso 3: Aprobación por Admin
+1. Admin ve solicitud pendiente
+2. Revisa datos del negocio propuesto
+3. Toca "Aprobar"
+4. Cloud Function `resolverSolicitud` con `aprobar: true`:
+   - Crea negocio en `/negocios/{negocioId}`
+   - Crea entrada en catálogo
+   - Crea versión inicial
+   - **Marca usuario con `dueno: true`**
+   - Marca solicitud como "aprobada"
+   - Se registra "resolveRequest" en auditoría
+
+### Resultado
+- Usuario ahora es DUEÑO
+- Negocio está publicado en catálogo
+- Usuario recibe notificación de aprobación
 
 ## Reglas de Firestore - Resumen
 
@@ -142,11 +177,15 @@ match /auditoria/{id} {
 }
 ```
 
-## Cloud Functions Relevantes
+## Cloud Functions Relevantes (OPCIÓN B)
 
-- `registrarComoDueno(email, password, nombre, negocio)` - Registro de dueño
+- `registrarUsuario(email, password, nombre)` - Registro de usuario regular
 - `enviarSolicitud(id, tipo, negocioId, propuesta)` - Envío de solicitud
+  - `tipo: "negocio"` → Solicitud para crear negocio
+  - `tipo: "cambio"` → Cambios a negocio existente
+  - `tipo: "anuncio"` → Nuevo anuncio para negocio
 - `resolverSolicitud(id, aprobar, motivo)` - Resolución de solicitud (admin)
+  - Al aprobar tipo "negocio": Crea negocios/, catalogo/, versiones/ y marca usuario como dueno
 - `gestionEditorial(id, tipo, campos)` - Gestión de categorías, boletines, etc (admin)
 
 Todas registran auditoría al completarse exitosamente.
