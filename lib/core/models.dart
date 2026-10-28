@@ -1,3 +1,5 @@
+import 'audit.dart';
+
 typedef Json = Map<String, dynamic>;
 
 class Item {
@@ -30,4 +32,10 @@ String? validPhone(String? value) =>
 bool activeAd(Item item, DateTime now) {
   final expires = DateTime.tryParse(item.text('vence'));
   return item.flag('publicado') && expires != null && expires.isAfter(now);
+}
+
+UserRole getUserRole(Account? account, {bool isOwner = false, List<String> ownedBusinesses = const []}) {
+  if (account?.admin == true) return UserRole.admin;
+  if (isOwner) return UserRole.owner;
+  return UserRole.user;
 }

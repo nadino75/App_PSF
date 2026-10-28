@@ -47,28 +47,28 @@ class DefaultFirebaseOptions {
   }
 
   static const FirebaseOptions web = FirebaseOptions(
-    apiKey: 'AIzaSyAowmifg8ZjezCnjGkB5crP50WRkg3FNoM',
-    appId: '1:544200957193:web:e426f4374c0c6d773dc7d8',
-    messagingSenderId: '544200957193',
-    projectId: 'psf-publinfo001',
-    authDomain: 'psf-publinfo001.firebaseapp.com',
-    storageBucket: 'psf-publinfo001.firebasestorage.app',
+    apiKey: 'AIzaSyAZnQDIMcJVfP8BYZH-ZDv7nUHY0WI1MrY',
+    appId: '1:637190314536:web:16e44fa75acf8bb3a3b31d',
+    messagingSenderId: '637190314536',
+    projectId: 'app-movil-psf',
+    authDomain: 'app-movil-psf.firebaseapp.com',
+    storageBucket: 'app-movil-psf.firebasestorage.app',
   );
 
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyDCRWuGqbLQWTy01TQcCl5pdYWaoeeBOBU',
-    appId: '1:544200957193:android:cef7f012df75e0983dc7d8',
-    messagingSenderId: '544200957193',
-    projectId: 'psf-publinfo001',
-    storageBucket: 'psf-publinfo001.firebasestorage.app',
+    apiKey: 'AIzaSyBEuhuvQn6FwT3xmA2VLNG8Vma5RvGe6KE',
+    appId: '1:637190314536:android:7f2e38f69a4d59c7a3b31d',
+    messagingSenderId: '637190314536',
+    projectId: 'app-movil-psf',
+    storageBucket: 'app-movil-psf.firebasestorage.app',
   );
 
   static const FirebaseOptions windows = FirebaseOptions(
-    apiKey: 'AIzaSyAowmifg8ZjezCnjGkB5crP50WRkg3FNoM',
-    appId: '1:544200957193:web:1409b604b25f66f43dc7d8',
-    messagingSenderId: '544200957193',
-    projectId: 'psf-publinfo001',
-    authDomain: 'psf-publinfo001.firebaseapp.com',
-    storageBucket: 'psf-publinfo001.firebasestorage.app',
+    apiKey: 'AIzaSyAZnQDIMcJVfP8BYZH-ZDv7nUHY0WI1MrY',
+    appId: '1:637190314536:web:f362d4b99d90bc77a3b31d',
+    messagingSenderId: '637190314536',
+    projectId: 'app-movil-psf',
+    authDomain: 'app-movil-psf.firebaseapp.com',
+    storageBucket: 'app-movil-psf.firebasestorage.app',
   );
 }

@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 import '../core/models.dart';
+import '../core/audit.dart';
 
 abstract class AppRepository extends ChangeNotifier {
   Account? account;
@@ -13,6 +14,7 @@ abstract class AppRepository extends ChangeNotifier {
       notices = [],
       news = [],
       history = [];
+  List<AuditLog> auditLogs = [], myAuditLogs = [];
   Set<String> favorites = {}, readNews = {};
   String? error;
   bool loading = false;
@@ -32,6 +34,8 @@ abstract class AppRepository extends ChangeNotifier {
   Future<void> markRead(String id, {bool global = false});
   Future<String> uploadImage(Uint8List bytes, String mime);
   Future<void> refresh();
+  Future<List<AuditLog>> fetchAuditLogs();
+  Future<List<AuditLog>> fetchMyAuditLogs();
   void clearError() {
     error = null;
     notifyListeners();

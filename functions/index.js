@@ -3,9 +3,12 @@
 const { onCall, HttpsError } = require('firebase-functions/v2/https');
 const { initializeApp } = require('firebase-admin/app');
 const { getFirestore, FieldValue } = require('firebase-admin/firestore');
+const { getAuth } = require('firebase-admin/auth');
 const D = require('./domain');
+const { logAudit, AuditAction, AuditResult } = require('./audit');
 initializeApp();
 const db = getFirestore();
+const auth = getAuth();
 const stamp = () => FieldValue.serverTimestamp();
 const call = (handler) => onCall({ region: 'us-central1', maxInstances: 10 }, async request => {
   try {
@@ -19,11 +22,56 @@ const call = (handler) => onCall({ region: 'us-central1', maxInstances: 10 }, as
     throw new HttpsError('internal', 'No se pudo guardar la operación. Vuelve a intentarlo.');
   }
 });
-const admin = auth => D.requireThat(auth.token.admin === true, 'permission-denied', 'Se requiere un administrador.');
+const requireAdmin = auth => D.requireThat(D.isAdmin(auth), 'permission-denied', 'Se requiere un administrador.');
+
+// OPCIÓN B: Solo crea usuario, solicitud de negocio es aparte
+exports.registrarUsuario = onCall({ region: 'us-central1', maxInstances: 10 }, async request => {
+  try {
+    // Rechazar usuarios ya autenticados
+    D.requireThat(!request.auth || request.auth.token.firebase?.sign_in_provider === 'anonymous',
+      'already-authenticated', 'Ya estás registrado.');
+
+    const email = D.text(request.data.email, 'email', 254);
+    const password = D.text(request.data.password, 'password', 128);
+    const nombre = D.text(request.data.nombre, 'nombre', 100);
+
+    // Validar email único en Firestore
+    const existingUser = await db.collection('usuarios')
+      .where('email', '==', email)
+      .limit(1)
+      .get();
+    D.requireThat(existingUser.empty, 'already-exists', 'Este correo ya está registrado.');
+
+    // Crear usuario en Firebase Auth
+    const userRecord = await auth.createUser({
+      email,
+      password,
+      displayName: nombre,
+    });
+
+    // Crear documento de usuario (SIN negocio)
+    await db.collection('usuarios').doc(userRecord.uid).set({
+      nombre,
+      email,
+      creado: stamp(),
+    });
+
+    // Registrar en auditoría
+    await logAudit(db, userRecord.uid, AuditAction.REGISTER, null, 'usuario');
+
+    return { uid: userRecord.uid };
+  } catch (error) {
+    if (error instanceof D.DomainError) throw new HttpsError(error.code, error.message);
+    if (error instanceof HttpsError) throw error;
+    console.error(error);
+    throw new HttpsError('internal', 'No se pudo registrar. Vuelve a intentarlo.');
+  }
+});
 
 exports.enviarSolicitud = call(async (data, auth) => {
   const id = D.identifier(data.id);
   const tipo = data.tipo;
+  // Permitir negocio, cambio y anuncio
   D.requireThat(['negocio', 'cambio', 'anuncio'].includes(tipo), 'invalid-argument', 'Tipo inválido.');
   const propuesta = tipo === 'anuncio' ? D.contentData(data.propuesta, tipo) : D.businessData(data.propuesta);
   const negocioId = tipo === 'negocio' ? id : D.identifier(data.negocioId);
@@ -59,6 +107,8 @@ exports.enviarSolicitud = call(async (data, auth) => {
       creado: existing.exists ? existing.data().creado : stamp(), actualizado: stamp() });
     if (estado === 'pendiente') tx.set(lock, { solicitudId: id, solicitanteId: auth.uid });
   });
+  await logAudit(db, auth.uid, AuditAction.SUBMIT_REQUEST, id, 'request',
+    { tipo, negocioId }, AuditResult.SUCCESS);
   return { id };
 });
 
@@ -72,11 +122,12 @@ exports.retirarSolicitud = call(async (data, auth) => {
     tx.update(ref, { estado: 'retirada', actualizado: stamp() });
     tx.delete(db.collection('pendientes').doc(`${request.negocioId}_${request.tipo}`));
   });
+  await logAudit(db, auth.uid, AuditAction.WITHDRAW_REQUEST, D.identifier(data.id), 'request', null, AuditResult.SUCCESS);
   return { ok: true };
 });
 
 exports.resolverSolicitud = call(async (data, auth) => {
-  admin(auth);
+  requireAdmin(auth);
   const id = D.identifier(data.id);
   const ref = db.collection('solicitudes').doc(id);
   await db.runTransaction(async tx => {
@@ -117,11 +168,17 @@ exports.resolverSolicitud = call(async (data, auth) => {
       mensaje: request.tipo === 'anuncio' ? 'Nuevo anuncio publicado' : 'Novedades en el catálogo', creado: stamp(),
     });
   });
+  const resultLog = {
+    solicitudId: id,
+    aprobada: data.aprobar,
+    motivo: data.motivo,
+  };
+  await logAudit(db, auth.uid, AuditAction.RESOLVE_REQUEST, id, 'request', resultLog, AuditResult.SUCCESS);
   return { ok: true };
 });
 
 exports.gestionEditorial = call(async (data, auth) => {
-  admin(auth);
+  requireAdmin(auth);
   const id = D.identifier(data.id);
   if (data.tipo === 'categoria') {
     await db.collection('categorias').doc(id).set({ nombre: D.text(data.nombre, 'nombre', 80), activa: data.activa === true });
@@ -146,5 +203,17 @@ exports.gestionEditorial = call(async (data, auth) => {
   } else if (data.tipo === 'anuncio') {
     await db.collection('anuncios').doc(id).update({ publicado: false });
   } else throw new D.DomainError('invalid-argument', 'Operación desconocida.');
+
+  const changeLog = { tipo: data.tipo, id };
+  if (data.tipo === 'categoria') changeLog.nombre = data.nombre;
+  if (data.tipo === 'boletin') changeLog.titulo = data.titulo;
+  if (data.tipo === 'negocio') changeLog.publicado = data.publicado;
+
+  const actionType = data.tipo === 'categoria' ? AuditAction.EDITORIAL_CATEGORY :
+                     data.tipo === 'boletin' ? AuditAction.EDITORIAL_BULLETIN :
+                     data.tipo === 'negocio' ? AuditAction.EDITORIAL_BUSINESS :
+                     AuditAction.EDITORIAL_AD;
+
+  await logAudit(db, auth.uid, actionType, id, data.tipo, changeLog, AuditResult.SUCCESS);
   return { ok: true };
 });

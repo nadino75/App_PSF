@@ -2,11 +2,12 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:cloud_functions/cloud_functions.dart';
+// import 'package:cloud_functions/cloud_functions.dart'; // Spark: no Cloud Functions
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 
 import '../core/models.dart';
+import '../core/audit.dart';
 import 'repository.dart';
 
 class FirebaseRepository extends AppRepository {
@@ -15,7 +16,7 @@ class FirebaseRepository extends AppRepository {
   }
   final auth = FirebaseAuth.instance;
   final db = FirebaseFirestore.instance;
-  final functions = FirebaseFunctions.instance;
+  // final functions = FirebaseFunctions.instance; // Spark: no Cloud Functions
   late final StreamSubscription<User?> _authSub;
   final List<StreamSubscription<QuerySnapshot<Json>>> _subscriptions = [];
   StreamSubscription<DocumentSnapshot<Json>>? _profileSub;
@@ -218,9 +219,10 @@ class FirebaseRepository extends AppRepository {
     notifyListeners();
   }
 
-  Future<void> invoke(String name, Json data) async {
-    await functions.httpsCallable(name).call<dynamic>(data);
-  }
+  // Spark: invoke() removed - no Cloud Functions
+  // Future<void> invoke(String name, Json data) async {
+  //   await functions.httpsCallable(name).call<dynamic>(data);
+  // }
 
   @override
   Future<void> signIn(String email, String password) async {
@@ -237,9 +239,32 @@ class FirebaseRepository extends AppRepository {
       password: password,
     );
     await result.user!.updateDisplayName(name.trim());
-    await db.collection('usuarios').doc(result.user!.uid).set({
+    // Spark: Crear usuario directamente sin Cloud Function
+    final uid = result.user!.uid;
+    await db.collection('usuarios').doc(uid).set({
       'nombre': name.trim(),
-    }, SetOptions(merge: true));
+      'email': email.trim(),
+      'creado': FieldValue.serverTimestamp(),
+    });
+    // Log audit from client
+    await _logAuditFromClient(uid, 'register', null, 'usuario');
+  }
+
+  Future<void> _logAuditFromClient(
+    String userId,
+    String action,
+    String? targetId,
+    String targetType,
+  ) async {
+    final auditId = db.collection('auditoria').doc().id;
+    await db.collection('auditoria').doc(auditId).set({
+      'userId': userId,
+      'action': action,
+      'targetId': targetId,
+      'targetType': targetType,
+      'result': 'success',
+      'timestamp': FieldValue.serverTimestamp(),
+    });
   }
 
   @override
@@ -253,16 +278,50 @@ class FirebaseRepository extends AppRepository {
       .doc(account!.uid)
       .set({'nombre': name.trim()}, SetOptions(merge: true));
   @override
-  Future<void> submit(Json data) => invoke('enviarSolicitud', data);
+  Future<void> submit(Json data) async {
+    // Spark: Crear solicitud directamente sin Cloud Function
+    final uid = account!.uid;
+    final tipo = data['tipo'] as String;
+    final id = data['id'] as String;
+    final negocioId = data['negocioId'] as String?;
+    final propuesta = data['propuesta'] as Json?;
+
+    await db.collection('solicitudes').doc(id).set({
+      'tipo': tipo,
+      'negocioId': negocioId ?? id,
+      'propuesta': propuesta,
+      'estado': 'pendiente',
+      'solicitanteId': uid,
+      'creado': FieldValue.serverTimestamp(),
+      'actualizado': FieldValue.serverTimestamp(),
+    });
+
+    await _logAuditFromClient(uid, 'submitRequest', id, 'request');
+  }
+
   @override
-  Future<void> withdraw(String id) => invoke('retirarSolicitud', {'id': id});
+  Future<void> withdraw(String id) async {
+    // Spark: No soportado sin Cloud Functions
+    throw UnimplementedError(
+      'withdraw requiere Cloud Functions. Actualizar a plan Blaze para usar esta función.',
+    );
+  }
+
   @override
-  Future<void> resolve(String id, bool approve, String reason) => invoke(
-    'resolverSolicitud',
-    {'id': id, 'aprobar': approve, 'motivo': reason},
-  );
+  Future<void> resolve(String id, bool approve, String reason) async {
+    // Spark: No soportado sin Cloud Functions
+    throw UnimplementedError(
+      'resolve requiere Cloud Functions. Actualizar a plan Blaze para usar esta función.',
+    );
+  }
+
   @override
-  Future<void> editorial(Json data) => invoke('gestionEditorial', data);
+  Future<void> editorial(Json data) async {
+    // Spark: No soportado sin Cloud Functions
+    throw UnimplementedError(
+      'editorial requiere Cloud Functions. Actualizar a plan Blaze para usar esta función.',
+    );
+  }
   @override
   Future<void> toggleFavorite(String id) async {
     final ref = db
@@ -301,6 +360,93 @@ class FirebaseRepository extends AppRepository {
     );
     await ref.putData(bytes, SettableMetadata(contentType: mime));
     return ref.getDownloadURL();
+  }
+
+  @override
+  Future<List<AuditLog>> fetchAuditLogs() async {
+    if (!isAdmin) throw Exception('Acceso denegado');
+    try {
+      loading = true;
+      error = null;
+      notifyListeners();
+      final snapshot = await db
+          .collection('auditoria')
+          .orderBy('creado', descending: true)
+          .limit(100)
+          .get();
+      auditLogs = snapshot.docs.map((doc) {
+        final data = doc.data();
+        return AuditLog(
+          id: doc.id,
+          userId: data['userId'] ?? '',
+          userName: data['userName'],
+          action: _parseAuditAction(data['action'] ?? ''),
+          targetId: data['targetId'],
+          targetType: data['targetType'],
+          changes: data['changes'],
+          result: data['result'],
+          reason: data['reason'],
+          timestamp: (data['creado'] as Timestamp?)?.toDate() ?? DateTime.now(),
+        );
+      }).toList();
+      notifyListeners();
+      return auditLogs;
+    } catch (e) {
+      error = 'Error cargando auditoría: $e';
+      notifyListeners();
+      rethrow;
+    } finally {
+      loading = false;
+    }
+  }
+
+  @override
+  Future<List<AuditLog>> fetchMyAuditLogs() async {
+    if (account == null) throw Exception('No autenticado');
+    try {
+      loading = true;
+      error = null;
+      notifyListeners();
+      final snapshot = await db
+          .collection('auditoria')
+          .where('userId', isEqualTo: account!.uid)
+          .orderBy('creado', descending: true)
+          .limit(50)
+          .get();
+      myAuditLogs = snapshot.docs.map((doc) {
+        final data = doc.data();
+        return AuditLog(
+          id: doc.id,
+          userId: data['userId'] ?? '',
+          userName: data['userName'],
+          action: _parseAuditAction(data['action'] ?? ''),
+          targetId: data['targetId'],
+          targetType: data['targetType'],
+          changes: data['changes'],
+          result: data['result'],
+          reason: data['reason'],
+          timestamp: (data['creado'] as Timestamp?)?.toDate() ?? DateTime.now(),
+        );
+      }).toList();
+      notifyListeners();
+      return myAuditLogs;
+    } catch (e) {
+      error = 'Error cargando actividad: $e';
+      notifyListeners();
+      rethrow;
+    } finally {
+      loading = false;
+    }
+  }
+
+  AuditAction _parseAuditAction(String action) {
+    try {
+      return AuditAction.values.firstWhere(
+        (e) => e.toString().split('.').last == action,
+      );
+    } catch (_) {
+      return AuditAction.signIn;
+    }
   }
 
   @override
