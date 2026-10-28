@@ -1,0 +1,326 @@
+═══════════════════════════════════════════════════════════════════════════════
+  INSTRUCCIONES FINALES DE DESPLIEGUE - APP MÓVIL PSF
+═══════════════════════════════════════════════════════════════════════════════
+
+📦 PROYECTO: app-movil-psf
+📅 FECHA: 2026-10-28
+🎯 ESTADO: Listo para despliegue
+
+═══════════════════════════════════════════════════════════════════════════════
+PASO 1: PREPARACIÓN EN FIREBASE CONSOLE
+═══════════════════════════════════════════════════════════════════════════════
+
+1. Accede a: https://console.firebase.google.com
+2. Crea nuevo proyecto: "app-movil-psf"
+   - Ubicación: Cercana a tus usuarios (ej: Sudamérica)
+   - Desactiva Google Analytics (opcional)
+
+3. Una vez creado el proyecto, obtén los siguientes IDs en Configuración:
+
+   📋 CREDENCIALES NECESARIAS:
+   ├── Project ID: app-movil-psf
+   ├── Android App Config
+   │   └── App ID: 1:XXXXXXXXX:android:XXXXXXXXXXXXX (copiar completo)
+   ├── Web App Config
+   │   └── App ID: 1:XXXXXXXXX:web:XXXXXXXXXXXXX (copiar completo)
+   └── Windows App Config
+       └── App ID: 1:XXXXXXXXX:web:XXXXXXXXXXXXX (copiar completo)
+
+4. Habilita los servicios necesarios:
+   ✓ Authentication → Email/Password (Habilitado)
+   ✓ Firestore Database → Crear
+   ✓ Cloud Storage → Crear bucket
+   ✓ Cloud Functions → Habilitadas automáticamente
+
+═══════════════════════════════════════════════════════════════════════════════
+PASO 2: ACTUALIZAR CREDENCIALES LOCALES
+═══════════════════════════════════════════════════════════════════════════════
+
+1. Edita: firebase.json
+
+2. Reemplaza los placeholders con los IDs de tu proyecto:
+
+   {
+     "flutter": {
+       "platforms": {
+         "android": {
+           "projectId": "app-movil-psf",
+           "appId": "1:XXXXXXXXX:android:XXXXXXXXXXXXX",  ← REEMPLAZAR
+           "fileOutput": "android/app/google-services.json"
+         },
+         "dart": {
+           "lib/firebase_options.dart": {
+             "projectId": "app-movil-psf",
+             "configurations": {
+               "android": "1:XXXXXXXXX:android:XXXXXXXXXXXXX",  ← REEMPLAZAR
+               "web": "1:XXXXXXXXX:web:XXXXXXXXXXXXX",  ← REEMPLAZAR
+               "windows": "1:XXXXXXXXX:web:XXXXXXXXXXXXX"  ← REEMPLAZAR
+             }
+           }
+         }
+       }
+     }
+   }
+
+3. Genera configuración de Flutter:
+
+   $ flutterfire configure --project=app-movil-psf
+
+═══════════════════════════════════════════════════════════════════════════════
+PASO 3: DESPLIEGUE AUTOMÁTICO
+═══════════════════════════════════════════════════════════════════════════════
+
+En Windows PowerShell, ejecuta:
+
+$ .\scripts\deploy.ps1
+
+Este script hará automáticamente:
+✓ Verificar Firebase CLI
+✓ Verificar autenticación
+✓ Desplegar reglas de Firestore
+✓ Desplegar índices de Firestore
+✓ Instalar dependencias de Cloud Functions
+✓ Desplegar Cloud Functions
+✓ Desplegar reglas de Storage
+
+El despliegue tardará ~3-5 minutos.
+
+═══════════════════════════════════════════════════════════════════════════════
+PASO 4: CREAR USUARIO ADMINISTRADOR
+═══════════════════════════════════════════════════════════════════════════════
+
+⚠️  IMPORTANTE: Esta operación se hace UNA SOLA VEZ
+
+1. En Firebase Console, ve a:
+   Cloud Functions → Entorno de prueba de Cloud Shell
+
+2. Ejecuta este comando (reemplaza el email):
+
+   firebase auth:create-user \
+     --email admin@appmovil.local \
+     --password "AdminPassword123!" \
+     --display-name "Administrador" \
+     --project app-movil-psf
+
+3. Anota el UID que devuelve (ej: abc123def456)
+
+4. Ahora asigna el custom claim de admin:
+
+   node -e "
+   const admin = require('firebase-admin');
+   admin.initializeApp();
+
+   async function makeAdmin() {
+     const user = await admin.auth().getUserByEmail('admin@appmovil.local');
+     await admin.auth().setCustomUserClaims(user.uid, { admin: true });
+     console.log('✅ Usuario admin creado correctamente');
+   }
+   makeAdmin();
+   "
+
+═══════════════════════════════════════════════════════════════════════════════
+PASO 5: PRUEBAS DE FUNCIONAMIENTO
+═══════════════════════════════════════════════════════════════════════════════
+
+TEST 1: Registro Normal
+├─ Email: usuario1@appmovil.local
+├─ Contraseña: Usuario123!
+└─ Resultado: ✅ Debe crear usuario y mostrar "Mi actividad" vacía
+
+TEST 2: Registro como Dueño
+├─ Email: dueno1@appmovil.local
+├─ Contraseña: Dueno123!
+├─ Nombre negocio: "Mi Café"
+├─ Categoría: Gastronomía
+├─ Dirección: Calle Principal 123
+├─ Teléfono: +591 70000000
+├─ Horarios: Lunes a viernes 09:00-18:00
+└─ Resultado: ✅ Debe crear usuario + negocio, aparece en "Mi actividad"
+
+TEST 3: Login como Admin
+├─ Email: admin@appmovil.local
+├─ Contraseña: AdminPassword123!
+└─ Resultado: ✅ Debe mostrar sección "Administración"
+            ✅ Debe mostrar "Auditoría global" con registros
+
+TEST 4: Permisos
+├─ Login como usuario1 → Intenta ver Auditoría global → ❌ Denegado
+├─ Login como dueno1 → No ve Auditoría global → ✅ Correcto
+└─ Login como admin → Ve Auditoría global → ✅ Correcto
+
+═══════════════════════════════════════════════════════════════════════════════
+ESTRUCTURA DE FUNCIONALIDADES IMPLEMENTADAS
+═══════════════════════════════════════════════════════════════════════════════
+
+📱 REGISTRO Y NEGOCIO
+
+Flujo Completo Implementado:
+
+1️⃣  REGISTRO COMO USUARIO REGULAR
+   └─ Crear cuenta con email/contraseña
+   └─ Auto-login
+   └─ Aparece en auditoría: "register"
+
+2️⃣  REGISTRO COMO DUEÑO DE NEGOCIO
+   └─ Widget especial con datos de negocio
+   └─ Crea atómicamente: Usuario + Negocio + Catálogo
+   └─ Auto-login como dueño
+   └─ Aparece en auditoría: "register" con tipo "dueño"
+
+3️⃣  SOLICITUDES DE PUBLICACIÓN
+   └─ Dueño puede enviar "cambios" a su negocio
+   └─ Dueño puede crear "anuncios" para su negocio
+   └─ Admin aprueba/rechaza con motivo
+   └─ Publicación automática al aprobar
+   └─ Todo queda en auditoría
+
+4️⃣  AUDITORÍA PERSONAL
+   └─ Cada usuario ve sus propias acciones
+   └─ Timestamp del servidor
+   └─ No se puede eliminar
+
+5️⃣  AUDITORÍA GLOBAL (ADMIN)
+   └─ Admin ve todas las acciones del sistema
+   └─ Usuario, acción, timestamp, resultado
+   └─ Filtrar por tipo de acción (opcional)
+
+═══════════════════════════════════════════════════════════════════════════════
+FLUJO DE PUBLICACIÓN EN EL NEGOCIO
+═══════════════════════════════════════════════════════════════════════════════
+
+┌─ DUEÑO PUBLICA CONTENIDO
+│
+├─ Envía "Solicitud de Cambio"
+│  ├─ Negocio ID: su negocio
+│  ├─ Tipo: "cambio" (actualizar datos) o "anuncio" (nuevo anuncio)
+│  ├─ Propuesta: datos nuevos
+│  └─ Estado: "pendiente"
+│
+├─ Sistema crea registro de auditoría
+│  └─ Acción: "submitRequest"
+│
+├─ ADMIN REVISA Y APRUEBA
+│  ├─ Ve solicitud pendiente
+│  ├─ Revisa cambios propuestos
+│  ├─ Toca "Aprobar"
+│  └─ Escribe motivo (opcional)
+│
+├─ Transacción en Firestore:
+│  ├─ Actualiza catálogo
+│  ├─ Crea versión aprobada
+│  ├─ Marca solicitud como "aprobada"
+│  ├─ Crea notificación para dueño
+│  ├─ Crea novedad pública
+│  └─ Registra en auditoría: "resolveRequest"
+│
+└─ Contenido ya está PUBLICADO en catálogo
+
+═══════════════════════════════════════════════════════════════════════════════
+ESTRUCTURA DE CARPETAS NUEVA
+═══════════════════════════════════════════════════════════════════════════════
+
+lib/
+├── core/
+│   ├── audit.dart ✨ NUEVO - Modelos de auditoría
+│   ├── models.dart (actualizado)
+│   └── visual_theme.dart
+├── data/
+│   ├── repository.dart (actualizado)
+│   ├── firebase_repository.dart (actualizado)
+│   ├── demo_repository.dart (actualizado)
+│   └── ...
+├── features/
+│   ├── audit_widgets.dart ✨ NUEVO - Widgets de auditoría
+│   ├── owner_signup.dart ✨ NUEVO - Registro como dueño
+│   ├── account_pages.dart (usa nuevos widgets)
+│   ├── admin_page.dart (usa nuevos widgets)
+│   └── ...
+└── main.dart
+
+functions/
+├── audit.js ✨ NUEVO - Servicio de auditoría
+├── domain.js (actualizado con validaciones de roles)
+├── index.js (actualizado con Cloud Functions)
+└── package.json
+
+docs/
+├── MODELO_Y_CONTRATOS.md
+├── VERIFICACION.md
+├── ROLES_PERMISOS.md ✨ NUEVO
+└── ...
+
+═══════════════════════════════════════════════════════════════════════════════
+VERIFICACIÓN FINAL PRE-DESPLIEGUE
+═══════════════════════════════════════════════════════════════════════════════
+
+Ejecuta en tu terminal:
+
+$ flutter analyze
+$ flutter test
+
+Ambos deben completar SIN ERRORES (warnings están bien)
+
+═══════════════════════════════════════════════════════════════════════════════
+COMANDOS ÚTILES DESPUÉS DEL DESPLIEGUE
+═══════════════════════════════════════════════════════════════════════════════
+
+# Ver logs de Cloud Functions
+firebase functions:log --project=app-movil-psf
+
+# Listar usuarios
+firebase auth:list --project=app-movil-psf
+
+# Exportar datos de Firestore (backup)
+firebase firestore:indexes:get --project=app-movil-psf
+
+# Redeploy solo funciones (si necesitas cambios)
+firebase deploy --only functions --project=app-movil-psf
+
+# Monitorear costos
+Ir a: https://console.cloud.google.com/billing/reports?project=app-movil-psf
+
+═══════════════════════════════════════════════════════════════════════════════
+SOPORTE Y TROUBLESHOOTING
+═══════════════════════════════════════════════════════════════════════════════
+
+❌ Error: "Project not found"
+$ firebase use app-movil-psf
+$ firebase deploy
+
+❌ Error: "Permission denied on /auditoria"
+- Verifica que firestore.rules está desplegada
+- Ejecuta: firebase firestore:rules:test
+
+❌ Error: "Cloud Function deployment failed"
+- Reinstala dependencias: npm --prefix functions ci
+- Redeploy: firebase deploy --only functions
+
+❌ Admin no puede ver auditoría
+- Verifica custom claim: const user = await admin.auth().getUser('UID');
+- Debe mostrar: {admin: true}
+
+═══════════════════════════════════════════════════════════════════════════════
+RESUMEN DE CAMBIOS IMPLEMENTADOS
+═══════════════════════════════════════════════════════════════════════════════
+
+✅ Modelos de Roles (Usuario, Dueño, Admin)
+✅ Sistema de Auditoría Centralizado
+✅ Cloud Function registrarComoDueno para registro rápido
+✅ Validaciones de Permisos en Servidor
+✅ Reglas Firestore para Auditoría Personal/Global
+✅ Widgets de UI para Auditoría y Rol
+✅ Widget de Registro como Dueño
+✅ Documentación Completa
+✅ Script de Despliegue Automático
+✅ Guía de Troubleshooting
+
+═══════════════════════════════════════════════════════════════════════════════
+PRÓXIMO PASO
+═══════════════════════════════════════════════════════════════════════════════
+
+Ejecuta:
+$ .\scripts\deploy.ps1
+
+¡Y listo! Tu app estará en vivo en 3-5 minutos.
+
+═══════════════════════════════════════════════════════════════════════════════
