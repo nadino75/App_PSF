@@ -14,11 +14,11 @@
       },
       "dart": {
         "lib/firebase_options.dart": {
-          "projectId": "psf-publinfo001",
+          "projectId": "app-movil-psf",
           "configurations": {
-            "android": "1:544200957193:android:cef7f012df75e0983dc7d8",
-            "web": "1:544200957193:web:e426f4374c0c6d773dc7d8",
-            "windows": "1:544200957193:web:1409b604b25f66f43dc7d8"
+            "android": "PENDIENTE_OBTENER_DE_CONSOLE",
+            "web": "PENDIENTE_OBTENER_DE_CONSOLE",
+            "windows": "PENDIENTE_OBTENER_DE_CONSOLE"
           }
         }
       }
