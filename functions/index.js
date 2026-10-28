@@ -22,7 +22,7 @@ const call = (handler) => onCall({ region: 'us-central1', maxInstances: 10 }, as
     throw new HttpsError('internal', 'No se pudo guardar la operación. Vuelve a intentarlo.');
   }
 });
-const adminUser = authUser => D.requireThat(authUser.token.admin === true, 'permission-denied', 'Se requiere un administrador.');
+const requireAdmin = auth => D.requireThat(D.isAdmin(auth), 'permission-denied', 'Se requiere un administrador.');
 
 exports.registrarComoDueno = onCall({ region: 'us-central1', maxInstances: 10 }, async request => {
   try {
@@ -149,7 +149,7 @@ exports.retirarSolicitud = call(async (data, auth) => {
 });
 
 exports.resolverSolicitud = call(async (data, auth) => {
-  adminUser(auth);
+  requireAdmin(auth);
   const id = D.identifier(data.id);
   const ref = db.collection('solicitudes').doc(id);
   await db.runTransaction(async tx => {
@@ -200,7 +200,7 @@ exports.resolverSolicitud = call(async (data, auth) => {
 });
 
 exports.gestionEditorial = call(async (data, auth) => {
-  adminUser(auth);
+  requireAdmin(auth);
   const id = D.identifier(data.id);
   if (data.tipo === 'categoria') {
     await db.collection('categorias').doc(id).set({ nombre: D.text(data.nombre, 'nombre', 80), activa: data.activa === true });

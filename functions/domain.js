@@ -53,4 +53,16 @@ function decision(request, approve, reason) {
     motivo: text(reason ?? '', 'motivo', 1000, approve),
   };
 }
-module.exports = { DomainError, requireThat, text, identifier, businessData, contentData, decision };
+function isAdmin(auth) {
+  return auth && auth.token && auth.token.admin === true;
+}
+function isOwner(auth, ownerId) {
+  return auth && auth.uid === ownerId;
+}
+function validateUserRole(auth, requiredRole) {
+  // requiredRole puede ser 'user', 'owner', 'admin'
+  if (requiredRole === 'admin') return isAdmin(auth);
+  if (requiredRole === 'owner') return !!auth && !!auth.uid;
+  return !!auth;
+}
+module.exports = { DomainError, requireThat, text, identifier, businessData, contentData, decision, isAdmin, isOwner, validateUserRole };
