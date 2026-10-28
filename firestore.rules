@@ -1,62 +1,195 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    function signedIn() { return request.auth != null && request.auth.token.firebase.sign_in_provider != 'anonymous'; }
-    function admin() { return signedIn() && request.auth.token.get('admin', false) == true; }
-    function self(uid) { return signedIn() && request.auth.uid == uid; }
-    function owner(id) { return signedIn() && get(/databases/$(database)/documents/negocios/$(id)).data.duenoId == request.auth.uid; }
-    function ownAudit(userId) { return signedIn() && resource.data.userId == userId && request.auth.uid == userId; }
-    match /catalogo/{id} { allow read: if resource.data.publicado == true || admin() || owner(id); }
-    match /negocios/{id} {
-      allow read: if admin() || (signedIn() && resource.data.duenoId == request.auth.uid);
-      match /versiones/{version} { allow read: if admin() || owner(id); }
+    // ===== FUNCIONES AUXILIARES =====
+    function conectado() {
+      return request.auth != null;
     }
-    match /categorias/{id} { allow read: if true; }
-    match /anuncios/{id} { allow read: if resource.data.publicado == true || admin(); }
-    match /boletines/{id} { allow read: if resource.data.publicado == true || admin(); }
-    match /novedades/{id} { allow read: if signedIn(); }
-    match /solicitudes/{id} {
-      allow read: if admin() || (signedIn() && resource.data.solicitanteId == request.auth.uid);
-      // Spark: Cliente crea solicitudes directamente (sin Cloud Function)
-      allow create: if signedIn()
-        && request.resource.data.solicitanteId == request.auth.uid
-        && request.resource.data.tipo in ['negocio', 'cambio', 'anuncio']
-        && request.resource.data.estado == 'pendiente'
+    function miDocumento(uid) {
+      return conectado() && request.auth.uid == uid;
+    }
+    function admin() {
+      return conectado() && request.auth.token.get('admin', false) == true;
+    }
+    function dueno() {
+      return conectado() && resource.data.duenoId == request.auth.uid;
+    }
+    function propietario(campo) {
+      return conectado() && resource.data[campo] == request.auth.uid;
+    }
+    function duenoInmutable() {
+      return request.resource.data.duenoId == resource.data.duenoId;
+    }
+    function autorInmutable() {
+      return request.resource.data.autorId == resource.data.autorId;
+    }
+    function texto(v, minimo, maximo) {
+      return v is string && v.size() >= minimo && v.size() <= maximo;
+    }
+    function validarCreacion(campos) {
+      return request.resource.data.keys().hasAll(campos)
         && request.resource.data.creado == request.time
         && request.resource.data.actualizado == request.time;
     }
-    match /historial/{id} { allow read: if admin() || (signedIn() && resource.data.solicitanteId == request.auth.uid); }
+
+    // ===== USUARIOS =====
     match /usuarios/{uid} {
-      allow read: if self(uid) || admin();
-      // Spark: Cliente crea usuario directamente (nombre, email, timestamp)
-      allow create: if self(uid) && request.resource.data.keys().hasOnly(['nombre', 'email', 'creado'])
-        && request.resource.data.nombre is string && request.resource.data.nombre.size() > 0 && request.resource.data.nombre.size() <= 100
+      allow create: if miDocumento(uid)
+        && request.resource.data.keys().hasOnly(['uid', 'nombre', 'email', 'telefono', 'ciudad', 'pais', 'fotoPerfil', 'rol', 'creado', 'actualizado'])
+        && request.resource.data.uid == uid
+        && request.resource.data.rol == 'usuario'
+        && texto(request.resource.data.nombre, 1, 100)
         && request.resource.data.email is string
         && request.resource.data.creado == request.time;
-      allow update: if self(uid) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['nombre', 'dueno'])
-        && request.resource.data.nombre is string && request.resource.data.nombre.size() > 0 && request.resource.data.nombre.size() <= 100
-        && request.resource.data.dueno is bool;
+
+      allow read: if miDocumento(uid) || admin();
+
+      allow update: if miDocumento(uid) && !('rol' in request.resource.data.diff(resource.data).affectedKeys())
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['nombre', 'telefono', 'ciudad', 'pais', 'fotoPerfil', 'actualizado'])
+        && texto(request.resource.data.nombre, 1, 100)
+        && request.resource.data.actualizado == request.time;
+
+      allow delete: if false;
+
+      match /solicitudes/{id} {
+        allow read: if miDocumento(uid) || admin();
+        allow create: if miDocumento(uid)
+          && validarCreacion(['uid', 'tipo', 'negocioId', 'estado', 'propuesta', 'solicitanteId'])
+          && request.resource.data.keys().hasOnly(['uid', 'tipo', 'negocioId', 'estado', 'propuesta', 'solicitanteId', 'creado', 'actualizado'])
+          && request.resource.data.uid == uid
+          && request.resource.data.solicitanteId == request.auth.uid
+          && request.resource.data.tipo in ['negocio', 'cambio', 'anuncio']
+          && request.resource.data.estado == 'pendiente'
+          && request.resource.data.propuesta is map;
+        allow delete: if false;
+      }
+
       match /favoritos/{id} {
-        allow read, delete: if self(uid);
-        allow create: if self(uid) && request.resource.data.keys().hasOnly(['creado'])
-          && request.resource.data.creado == request.time
-          && get(/databases/$(database)/documents/catalogo/$(id)).data.publicado == true;
+        allow read: if miDocumento(uid);
+        allow create: if miDocumento(uid)
+          && request.resource.data.keys().hasOnly(['catalogoId', 'creado'])
+          && request.resource.data.creado == request.time;
+        allow delete: if miDocumento(uid);
       }
+
       match /notificaciones/{id} {
-        allow read: if self(uid);
-        allow update: if self(uid) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['leida'])
+        allow read: if miDocumento(uid);
+        allow update: if miDocumento(uid)
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['leida'])
           && request.resource.data.leida is bool;
+        allow delete: if false;
       }
-      match /lecturas/{id} {
-        allow read: if self(uid);
-        allow create, update: if self(uid) && request.resource.data.keys().hasOnly(['leida']) && request.resource.data.leida == true;
+
+      match /auditoria/{id} {
+        allow read: if miDocumento(uid) || admin();
+        allow write: if false;
+        allow delete: if false;
       }
     }
-    match /auditoria/{id} {
-      allow read: if ownAudit(resource.data.userId) || admin();
-      allow write: if false;
+
+    // ===== NEGOCIOS =====
+    match /negocios/{id} {
+      allow create: if conectado()
+        && validarCreacion(['duenoId', 'nombre', 'descripcion', 'categoria', 'direccion', 'telefono', 'horarios', 'publicado', 'versionId'])
+        && request.resource.data.keys().hasOnly(['duenoId', 'nombre', 'descripcion', 'categoria', 'direccion', 'telefono', 'horarios', 'publicado', 'versionId', 'creado', 'actualizado'])
+        && request.resource.data.duenoId == request.auth.uid
+        && texto(request.resource.data.nombre, 1, 150)
+        && texto(request.resource.data.descripcion, 1, 1000)
+        && texto(request.resource.data.categoria, 1, 100)
+        && texto(request.resource.data.direccion, 1, 200)
+        && texto(request.resource.data.telefono, 1, 20)
+        && request.resource.data.publicado == false;
+
+      allow read: if dueno() || admin() || (resource.data.publicado == true && conectado());
+
+      allow update: if dueno() && duenoInmutable()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['nombre', 'descripcion', 'categoria', 'direccion', 'telefono', 'horarios', 'publicado', 'actualizado'])
+        && texto(request.resource.data.nombre, 1, 150)
+        && texto(request.resource.data.descripcion, 1, 1000)
+        && texto(request.resource.data.categoria, 1, 100)
+        && texto(request.resource.data.direccion, 1, 200)
+        && texto(request.resource.data.telefono, 1, 20)
+        && request.resource.data.actualizado == request.time;
+
+      allow delete: if false;
+
+      match /versiones/{version} {
+        allow read: if dueno() || admin();
+        allow create, update, delete: if false;
+      }
+    }
+
+    // ===== CATÁLOGO =====
+    match /catalogo/{id} {
+      allow read: if (resource.data.publicado == true && conectado()) || admin() || dueno();
+      allow create, update, delete: if false;
+    }
+
+    // ===== ANUNCIOS =====
+    match /anuncios/{id} {
+      allow create: if conectado()
+        && validarCreacion(['duenoId', 'negocioId', 'titulo', 'descripcion', 'precio', 'publicado'])
+        && request.resource.data.keys().hasOnly(['duenoId', 'negocioId', 'titulo', 'descripcion', 'precio', 'imagen', 'publicado', 'creado', 'actualizado'])
+        && request.resource.data.duenoId == request.auth.uid
+        && texto(request.resource.data.titulo, 1, 200)
+        && texto(request.resource.data.descripcion, 1, 1000)
+        && request.resource.data.negocioId is string
+        && request.resource.data.publicado == false;
+
+      allow read: if (resource.data.publicado == true && conectado()) || admin() || propietario('duenoId');
+
+      allow update: if propietario('duenoId') && autorInmutable()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['titulo', 'descripcion', 'precio', 'imagen', 'publicado', 'actualizado'])
+        && texto(request.resource.data.titulo, 1, 200)
+        && texto(request.resource.data.descripcion, 1, 1000)
+        && request.resource.data.actualizado == request.time;
+
+      allow delete: if propietario('duenoId');
+    }
+
+    // ===== CATEGORÍAS =====
+    match /categorias/{id} {
+      allow read: if conectado();
+      allow create, update, delete: if admin();
+    }
+
+    // ===== BOLETINES =====
+    match /boletines/{id} {
+      allow read: if conectado();
+      allow create, update: if admin();
       allow delete: if false;
     }
-    match /{document=**} { allow read, write: if false; }
+
+    // ===== NOVEDADES =====
+    match /novedades/{id} {
+      allow read: if conectado();
+      allow create, update, delete: if admin();
+    }
+
+    // ===== SOLICITUDES (Global) =====
+    match /solicitudes/{id} {
+      allow read: if conectado() && (resource.data.solicitanteId == request.auth.uid || admin());
+      allow create: if conectado()
+        && validarCreacion(['solicitanteId', 'tipo', 'negocioId', 'estado', 'propuesta'])
+        && request.resource.data.keys().hasOnly(['solicitanteId', 'tipo', 'negocioId', 'estado', 'propuesta', 'creado', 'actualizado'])
+        && request.resource.data.solicitanteId == request.auth.uid
+        && request.resource.data.tipo in ['negocio', 'cambio', 'anuncio']
+        && request.resource.data.estado == 'pendiente'
+        && request.resource.data.propuesta is map
+        && request.resource.data.negocioId is string;
+      allow update: if admin();
+      allow delete: if false;
+    }
+
+    // ===== HISTORIAL =====
+    match /historial/{id} {
+      allow read: if conectado() && (resource.data.solicitanteId == request.auth.uid || admin());
+      allow create, update, delete: if false;
+    }
+
+    // ===== DENY ALL =====
+    match /{document=**} {
+      allow read, write: if false;
+    }
   }
 }
