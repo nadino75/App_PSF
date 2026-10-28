@@ -5,6 +5,7 @@ service cloud.firestore {
     function admin() { return signedIn() && request.auth.token.get('admin', false) == true; }
     function self(uid) { return signedIn() && request.auth.uid == uid; }
     function owner(id) { return signedIn() && get(/databases/$(database)/documents/negocios/$(id)).data.duenoId == request.auth.uid; }
+    function ownAudit(userId) { return signedIn() && resource.data.userId == userId && request.auth.uid == userId; }
     match /catalogo/{id} { allow read: if resource.data.publicado == true || admin() || owner(id); }
     match /negocios/{id} {
       allow read: if admin() || (signedIn() && resource.data.duenoId == request.auth.uid);
@@ -37,6 +38,11 @@ service cloud.firestore {
         allow read: if self(uid);
         allow create, update: if self(uid) && request.resource.data.keys().hasOnly(['leida']) && request.resource.data.leida == true;
       }
+    }
+    match /auditoria/{id} {
+      allow read: if ownAudit(resource.data.userId) || admin();
+      allow write: if false;
+      allow delete: if false;
     }
     match /{document=**} { allow read, write: if false; }
   }
