@@ -3,9 +3,11 @@
 const { onCall, HttpsError } = require('firebase-functions/v2/https');
 const { initializeApp } = require('firebase-admin/app');
 const { getFirestore, FieldValue } = require('firebase-admin/firestore');
+const { getAuth } = require('firebase-admin/auth');
 const D = require('./domain');
 initializeApp();
 const db = getFirestore();
+const auth = getAuth();
 const stamp = () => FieldValue.serverTimestamp();
 const call = (handler) => onCall({ region: 'us-central1', maxInstances: 10 }, async request => {
   try {
@@ -19,7 +21,74 @@ const call = (handler) => onCall({ region: 'us-central1', maxInstances: 10 }, as
     throw new HttpsError('internal', 'No se pudo guardar la operación. Vuelve a intentarlo.');
   }
 });
-const admin = auth => D.requireThat(auth.token.admin === true, 'permission-denied', 'Se requiere un administrador.');
+const adminUser = authUser => D.requireThat(authUser.token.admin === true, 'permission-denied', 'Se requiere un administrador.');
+
+exports.registrarComoDueno = onCall({ region: 'us-central1', maxInstances: 10 }, async request => {
+  try {
+    // Rechazar usuarios ya autenticados
+    D.requireThat(!request.auth || request.auth.token.firebase?.sign_in_provider === 'anonymous',
+      'already-authenticated', 'Ya estás registrado.');
+
+    const email = D.text(request.data.email, 'email', 254);
+    const password = D.text(request.data.password, 'password', 128);
+    const nombre = D.text(request.data.nombre, 'nombre', 100);
+    const negocioData = D.businessData(request.data.negocio);
+
+    // Validar email único en Firestore
+    const existingUser = await db.collection('usuarios')
+      .where('email', '==', email)
+      .limit(1)
+      .get();
+    D.requireThat(existingUser.empty, 'already-exists', 'Este correo ya está registrado.');
+
+    // Crear usuario en Firebase Auth
+    const userRecord = await auth.createUser({
+      email,
+      password,
+      displayName: nombre,
+    });
+
+    // Crear documento de usuario y negocio en transacción
+    const negocioId = db.collection('negocios').doc().id;
+    await db.runTransaction(async tx => {
+      // Usuario
+      tx.set(db.collection('usuarios').doc(userRecord.uid), {
+        nombre,
+        email,
+        dueno: true,
+        creado: stamp(),
+      });
+
+      // Negocio
+      tx.set(db.collection('negocios').doc(negocioId), {
+        duenoId: userRecord.uid,
+        publicado: false,
+        versionId: negocioId,
+        creado: stamp(),
+      });
+
+      // Catálogo
+      tx.set(db.collection('catalogo').doc(negocioId), {
+        ...negocioData,
+        publicado: false,
+        creado: stamp(),
+      });
+
+      // Versión inicial
+      tx.set(db.collection('negocios').doc(negocioId).collection('versiones').doc(negocioId), {
+        ...negocioData,
+        creado: stamp(),
+      });
+    });
+
+    return { uid: userRecord.uid, negocioId };
+  } catch (error) {
+    if (error instanceof D.DomainError) throw new HttpsError(error.code, error.message);
+    if (error instanceof HttpsError) throw error;
+    console.error(error);
+    throw new HttpsError('internal', 'No se pudo registrar. Vuelve a intentarlo.');
+  }
+});
 
 exports.enviarSolicitud = call(async (data, auth) => {
   const id = D.identifier(data.id);
@@ -76,7 +145,7 @@ exports.retirarSolicitud = call(async (data, auth) => {
 });
 
 exports.resolverSolicitud = call(async (data, auth) => {
-  admin(auth);
+  adminUser(auth);
   const id = D.identifier(data.id);
   const ref = db.collection('solicitudes').doc(id);
   await db.runTransaction(async tx => {
@@ -121,7 +190,7 @@ exports.resolverSolicitud = call(async (data, auth) => {
 });
 
 exports.gestionEditorial = call(async (data, auth) => {
-  admin(auth);
+  adminUser(auth);
   const id = D.identifier(data.id);
   if (data.tipo === 'categoria') {
     await db.collection('categorias').doc(id).set({ nombre: D.text(data.nombre, 'nombre', 80), activa: data.activa === true });
