@@ -7,6 +7,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 
 import '../core/models.dart';
+import '../core/audit.dart';
 import 'repository.dart';
 
 class FirebaseRepository extends AppRepository {
@@ -301,6 +302,93 @@ class FirebaseRepository extends AppRepository {
     );
     await ref.putData(bytes, SettableMetadata(contentType: mime));
     return ref.getDownloadURL();
+  }
+
+  @override
+  Future<List<AuditLog>> fetchAuditLogs() async {
+    if (!isAdmin) throw Exception('Acceso denegado');
+    try {
+      loading = true;
+      error = null;
+      notifyListeners();
+      final snapshot = await db
+          .collection('auditoria')
+          .orderBy('creado', descending: true)
+          .limit(100)
+          .get();
+      auditLogs = snapshot.docs.map((doc) {
+        final data = doc.data();
+        return AuditLog(
+          id: doc.id,
+          userId: data['userId'] ?? '',
+          userName: data['userName'],
+          action: _parseAuditAction(data['action'] ?? ''),
+          targetId: data['targetId'],
+          targetType: data['targetType'],
+          changes: data['changes'],
+          result: data['result'],
+          reason: data['reason'],
+          timestamp: (data['creado'] as Timestamp?)?.toDate() ?? DateTime.now(),
+        );
+      }).toList();
+      notifyListeners();
+      return auditLogs;
+    } catch (e) {
+      error = 'Error cargando auditoría: $e';
+      notifyListeners();
+      rethrow;
+    } finally {
+      loading = false;
+    }
+  }
+
+  @override
+  Future<List<AuditLog>> fetchMyAuditLogs() async {
+    if (account == null) throw Exception('No autenticado');
+    try {
+      loading = true;
+      error = null;
+      notifyListeners();
+      final snapshot = await db
+          .collection('auditoria')
+          .where('userId', isEqualTo: account!.uid)
+          .orderBy('creado', descending: true)
+          .limit(50)
+          .get();
+      myAuditLogs = snapshot.docs.map((doc) {
+        final data = doc.data();
+        return AuditLog(
+          id: doc.id,
+          userId: data['userId'] ?? '',
+          userName: data['userName'],
+          action: _parseAuditAction(data['action'] ?? ''),
+          targetId: data['targetId'],
+          targetType: data['targetType'],
+          changes: data['changes'],
+          result: data['result'],
+          reason: data['reason'],
+          timestamp: (data['creado'] as Timestamp?)?.toDate() ?? DateTime.now(),
+        );
+      }).toList();
+      notifyListeners();
+      return myAuditLogs;
+    } catch (e) {
+      error = 'Error cargando actividad: $e';
+      notifyListeners();
+      rethrow;
+    } finally {
+      loading = false;
+    }
+  }
+
+  AuditAction _parseAuditAction(String action) {
+    try {
+      return AuditAction.values.firstWhere(
+        (e) => e.toString().split('.').last == action,
+      );
+    } catch (_) {
+      return AuditAction.signIn;
+    }
   }
 
   @override

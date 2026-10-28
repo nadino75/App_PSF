@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import '../core/models.dart';
+import '../core/audit.dart';
 import 'repository.dart';
 
 class DemoRepository extends AppRepository {
@@ -304,5 +305,15 @@ class DemoRepository extends AppRepository {
     throw StateError(
       'La carga de archivos requiere Firebase. En la demo puedes añadir una dirección HTTPS.',
     );
+  }
+
+  @override
+  Future<List<AuditLog>> fetchAuditLogs() async {
+    return [];
+  }
+
+  @override
+  Future<List<AuditLog>> fetchMyAuditLogs() async {
+    return [];
   }
 }
