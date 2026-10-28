@@ -263,7 +263,7 @@ class FirebaseRepository extends AppRepository {
       'targetId': targetId,
       'targetType': targetType,
       'result': 'success',
-      'timestamp': FieldValue.serverTimestamp(),
+      'creado': FieldValue.serverTimestamp(),
     });
   }
 
@@ -301,26 +301,182 @@ class FirebaseRepository extends AppRepository {
 
   @override
   Future<void> withdraw(String id) async {
-    // Spark: No soportado sin Cloud Functions
-    throw UnimplementedError(
-      'withdraw requiere Cloud Functions. Actualizar a plan Blaze para usar esta función.',
-    );
+    await db.collection('solicitudes').doc(id).update({
+      'estado': 'retirada',
+      'actualizado': FieldValue.serverTimestamp(),
+    });
+    await _logAuditFromClient(account!.uid, 'withdrawRequest', id, 'request');
   }
 
   @override
   Future<void> resolve(String id, bool approve, String reason) async {
-    // Spark: No soportado sin Cloud Functions
-    throw UnimplementedError(
-      'resolve requiere Cloud Functions. Actualizar a plan Blaze para usar esta función.',
-    );
+    if (!isAdmin) throw StateError('Solo un administrador puede resolver solicitudes.');
+    final motivo = reason.trim();
+    if (!approve && motivo.isEmpty) {
+      throw StateError('Indica el motivo del rechazo.');
+    }
+    final reviewer = account!.uid;
+    final ref = db.collection('solicitudes').doc(id);
+    await db.runTransaction((tx) async {
+      final snap = await tx.get(ref);
+      if (!snap.exists) throw StateError('Solicitud inexistente.');
+      final request = snap.data()!;
+      if (request['estado'] != 'pendiente') {
+        throw StateError('Esta solicitud ya no está pendiente.');
+      }
+      final tipo = request['tipo'] as String;
+      final negocioId = request['negocioId'] as String;
+      final solicitanteId = request['solicitanteId'] as String;
+      final propuesta = Map<String, dynamic>.from(request['propuesta'] as Map);
+      final business = db.collection('negocios').doc(negocioId);
+      final current = await tx.get(business);
+      DocumentSnapshot<Json>? category;
+      if (approve) {
+        if (tipo == 'anuncio') {
+          if (!current.exists || current.data()!['duenoId'] != solicitanteId) {
+            throw StateError('El negocio ya no pertenece al solicitante.');
+          }
+          if (current.data()!['publicado'] != true) {
+            throw StateError('El negocio no está publicado.');
+          }
+        } else {
+          if (tipo != 'negocio' &&
+              (!current.exists || current.data()!['duenoId'] != solicitanteId)) {
+            throw StateError('El negocio ya no pertenece al solicitante.');
+          }
+          category = await tx.get(
+            db.collection('categorias').doc(propuesta['categoria'] as String),
+          );
+          if (!category.exists || category.data()!['activa'] != true) {
+            throw StateError('La categoría ya no está activa.');
+          }
+        }
+      }
+      final now = FieldValue.serverTimestamp();
+      if (approve) {
+        if (tipo == 'anuncio') {
+          tx.set(db.collection('anuncios').doc(id), {
+            ...propuesta,
+            'publicado': true,
+            'creado': now,
+          });
+        } else {
+          tx.set(business, {
+            'duenoId': solicitanteId,
+            'publicado': true,
+            'versionId': id,
+            'actualizado': now,
+          });
+          tx.set(db.collection('catalogo').doc(negocioId), {
+            ...propuesta,
+            'publicado': true,
+            'actualizado': now,
+          });
+          tx.set(business.collection('versiones').doc(id), {
+            ...propuesta,
+            'creado': now,
+          });
+          tx.set(db.collection('usuarios').doc(solicitanteId), {
+            'dueno': true,
+          }, SetOptions(merge: true));
+        }
+        tx.set(db.collection('novedades').doc(id), {
+          'titulo': propuesta['nombre'] ?? propuesta['titulo'],
+          'mensaje': tipo == 'anuncio'
+              ? 'Nuevo anuncio publicado'
+              : 'Novedades en el catálogo',
+          'creado': now,
+        });
+      }
+      final estado = approve ? 'aprobada' : 'rechazada';
+      tx.update(ref, {
+        'estado': estado,
+        'motivo': motivo,
+        'revisorId': reviewer,
+        'resuelto': now,
+        'actualizado': now,
+      });
+      tx.set(db.collection('historial').doc(id), {
+        'solicitudId': id,
+        'solicitanteId': solicitanteId,
+        'revisorId': reviewer,
+        'estado': estado,
+        'motivo': motivo,
+        'creado': now,
+      });
+      tx.set(
+        db
+            .collection('usuarios')
+            .doc(solicitanteId)
+            .collection('notificaciones')
+            .doc(id),
+        {
+          'titulo': 'Solicitud $estado',
+          'mensaje': motivo.isEmpty ? 'Tu contenido ya está publicado.' : motivo,
+          'solicitudId': id,
+          'leida': false,
+          'creado': now,
+        },
+      );
+    });
+    await _logAuditFromClient(reviewer, 'resolveRequest', id, 'request');
   }
 
   @override
   Future<void> editorial(Json data) async {
-    // Spark: No soportado sin Cloud Functions
-    throw UnimplementedError(
-      'editorial requiere Cloud Functions. Actualizar a plan Blaze para usar esta función.',
-    );
+    if (!isAdmin) throw StateError('Solo un administrador puede hacer esto.');
+    final tipo = data['tipo'] as String;
+    final id = data['id'] as String;
+    final now = FieldValue.serverTimestamp();
+    String action;
+    if (tipo == 'categoria') {
+      action = 'editorialCategory';
+      await db.collection('categorias').doc(id).set({
+        'nombre': (data['nombre'] as String).trim(),
+        'activa': data['activa'] == true,
+      });
+    } else if (tipo == 'boletin') {
+      action = 'editorialBulletin';
+      final publicado = data['publicado'] == true;
+      final titulo = (data['titulo'] as String).trim();
+      final batch = db.batch();
+      batch.set(db.collection('boletines').doc(id), {
+        'titulo': titulo,
+        'descripcion': (data['descripcion'] as String).trim(),
+        'publicado': publicado,
+        'actualizado': now,
+      });
+      if (publicado) {
+        batch.set(db.collection('novedades').doc('boletin_$id'), {
+          'titulo': titulo,
+          'mensaje': 'Nuevo boletín disponible',
+          'creado': now,
+        });
+      }
+      await batch.commit();
+    } else if (tipo == 'negocio') {
+      action = 'editorialBusiness';
+      final publicado = data['publicado'] == true;
+      final ads = await db
+          .collection('anuncios')
+          .where('negocioId', isEqualTo: id)
+          .get();
+      final batch = db.batch();
+      batch.update(db.collection('negocios').doc(id), {'publicado': publicado});
+      batch.update(db.collection('catalogo').doc(id), {'publicado': publicado});
+      if (!publicado) {
+        for (final ad in ads.docs) {
+          batch.update(ad.reference, {'publicado': false});
+        }
+      }
+      await batch.commit();
+    } else if (tipo == 'anuncio') {
+      action = 'editorialAd';
+      await db.collection('anuncios').doc(id).update({'publicado': false});
+    } else {
+      throw StateError('Operación desconocida.');
+    }
+    await _logAuditFromClient(account!.uid, action, id, tipo);
   }
   @override
   Future<void> toggleFavorite(String id) async {
