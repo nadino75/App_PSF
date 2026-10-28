@@ -60,7 +60,7 @@ Write-Host "[OK] Dependencias instaladas" -ForegroundColor Green
 Write-Host ""
 
 Write-Host "[6] Desplegando Cloud Functions..." -ForegroundColor Cyan
-firebase deploy --only functions --project=$ProjectId --region=$Region
+firebase deploy --only functions --project=$ProjectId
 if ($LASTEXITCODE -ne 0) {
     Write-Host "[ERROR] Error al desplegar funciones" -ForegroundColor Red
     exit 1
