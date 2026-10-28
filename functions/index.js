@@ -24,7 +24,8 @@ const call = (handler) => onCall({ region: 'us-central1', maxInstances: 10 }, as
 });
 const requireAdmin = auth => D.requireThat(D.isAdmin(auth), 'permission-denied', 'Se requiere un administrador.');
 
-exports.registrarComoDueno = onCall({ region: 'us-central1', maxInstances: 10 }, async request => {
+// OPCIÓN B: Solo crea usuario, solicitud de negocio es aparte
+exports.registrarUsuario = onCall({ region: 'us-central1', maxInstances: 10 }, async request => {
   try {
     // Rechazar usuarios ya autenticados
     D.requireThat(!request.auth || request.auth.token.firebase?.sign_in_provider === 'anonymous',
@@ -33,7 +34,6 @@ exports.registrarComoDueno = onCall({ region: 'us-central1', maxInstances: 10 },
     const email = D.text(request.data.email, 'email', 254);
     const password = D.text(request.data.password, 'password', 128);
     const nombre = D.text(request.data.nombre, 'nombre', 100);
-    const negocioData = D.businessData(request.data.negocio);
 
     // Validar email único en Firestore
     const existingUser = await db.collection('usuarios')
@@ -49,40 +49,17 @@ exports.registrarComoDueno = onCall({ region: 'us-central1', maxInstances: 10 },
       displayName: nombre,
     });
 
-    // Crear documento de usuario y negocio en transacción
-    const negocioId = db.collection('negocios').doc().id;
-    await db.runTransaction(async tx => {
-      // Usuario
-      tx.set(db.collection('usuarios').doc(userRecord.uid), {
-        nombre,
-        email,
-        dueno: true,
-        creado: stamp(),
-      });
-
-      // Negocio
-      tx.set(db.collection('negocios').doc(negocioId), {
-        duenoId: userRecord.uid,
-        publicado: false,
-        versionId: negocioId,
-        creado: stamp(),
-      });
-
-      // Catálogo
-      tx.set(db.collection('catalogo').doc(negocioId), {
-        ...negocioData,
-        publicado: false,
-        creado: stamp(),
-      });
-
-      // Versión inicial
-      tx.set(db.collection('negocios').doc(negocioId).collection('versiones').doc(negocioId), {
-        ...negocioData,
-        creado: stamp(),
-      });
+    // Crear documento de usuario (SIN negocio)
+    await db.collection('usuarios').doc(userRecord.uid).set({
+      nombre,
+      email,
+      creado: stamp(),
     });
 
-    return { uid: userRecord.uid, negocioId };
+    // Registrar en auditoría
+    await logAudit(db, userRecord.uid, AuditAction.REGISTER, null, 'usuario');
+
+    return { uid: userRecord.uid };
   } catch (error) {
     if (error instanceof D.DomainError) throw new HttpsError(error.code, error.message);
     if (error instanceof HttpsError) throw error;
@@ -94,8 +71,8 @@ exports.registrarComoDueno = onCall({ region: 'us-central1', maxInstances: 10 },
 exports.enviarSolicitud = call(async (data, auth) => {
   const id = D.identifier(data.id);
   const tipo = data.tipo;
-  // Los usuarios regulares NO pueden crear negocios (solo dueños vía registrarComoDueno)
-  D.requireThat(['cambio', 'anuncio'].includes(tipo), 'invalid-argument', 'Tipo inválido. Use registro especial para crear negocio.');
+  // Permitir negocio, cambio y anuncio
+  D.requireThat(['negocio', 'cambio', 'anuncio'].includes(tipo), 'invalid-argument', 'Tipo inválido.');
   const propuesta = tipo === 'anuncio' ? D.contentData(data.propuesta, tipo) : D.businessData(data.propuesta);
   const negocioId = tipo === 'negocio' ? id : D.identifier(data.negocioId);
   if (tipo === 'anuncio') D.requireThat(propuesta.negocioId === negocioId, 'invalid-argument', 'Negocio inválido.');
