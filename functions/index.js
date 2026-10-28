@@ -5,6 +5,7 @@ const { initializeApp } = require('firebase-admin/app');
 const { getFirestore, FieldValue } = require('firebase-admin/firestore');
 const { getAuth } = require('firebase-admin/auth');
 const D = require('./domain');
+const { logAudit, AuditAction, AuditResult } = require('./audit');
 initializeApp();
 const db = getFirestore();
 const auth = getAuth();
@@ -128,6 +129,8 @@ exports.enviarSolicitud = call(async (data, auth) => {
       creado: existing.exists ? existing.data().creado : stamp(), actualizado: stamp() });
     if (estado === 'pendiente') tx.set(lock, { solicitudId: id, solicitanteId: auth.uid });
   });
+  await logAudit(db, auth.uid, AuditAction.SUBMIT_REQUEST, id, 'request',
+    { tipo, negocioId }, AuditResult.SUCCESS);
   return { id };
 });
 
@@ -141,6 +144,7 @@ exports.retirarSolicitud = call(async (data, auth) => {
     tx.update(ref, { estado: 'retirada', actualizado: stamp() });
     tx.delete(db.collection('pendientes').doc(`${request.negocioId}_${request.tipo}`));
   });
+  await logAudit(db, auth.uid, AuditAction.WITHDRAW_REQUEST, D.identifier(data.id), 'request', null, AuditResult.SUCCESS);
   return { ok: true };
 });
 
@@ -186,6 +190,12 @@ exports.resolverSolicitud = call(async (data, auth) => {
       mensaje: request.tipo === 'anuncio' ? 'Nuevo anuncio publicado' : 'Novedades en el catálogo', creado: stamp(),
     });
   });
+  const resultLog = {
+    solicitudId: id,
+    aprobada: data.aprobar,
+    motivo: data.motivo,
+  };
+  await logAudit(db, auth.uid, AuditAction.RESOLVE_REQUEST, id, 'request', resultLog, AuditResult.SUCCESS);
   return { ok: true };
 });
 
@@ -215,5 +225,17 @@ exports.gestionEditorial = call(async (data, auth) => {
   } else if (data.tipo === 'anuncio') {
     await db.collection('anuncios').doc(id).update({ publicado: false });
   } else throw new D.DomainError('invalid-argument', 'Operación desconocida.');
+
+  const changeLog = { tipo: data.tipo, id };
+  if (data.tipo === 'categoria') changeLog.nombre = data.nombre;
+  if (data.tipo === 'boletin') changeLog.titulo = data.titulo;
+  if (data.tipo === 'negocio') changeLog.publicado = data.publicado;
+
+  const actionType = data.tipo === 'categoria' ? AuditAction.EDITORIAL_CATEGORY :
+                     data.tipo === 'boletin' ? AuditAction.EDITORIAL_BULLETIN :
+                     data.tipo === 'negocio' ? AuditAction.EDITORIAL_BUSINESS :
+                     AuditAction.EDITORIAL_AD;
+
+  await logAudit(db, auth.uid, actionType, id, data.tipo, changeLog, AuditResult.SUCCESS);
   return { ok: true };
 });
