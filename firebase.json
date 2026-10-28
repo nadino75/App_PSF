@@ -7,8 +7,8 @@
     "platforms": {
       "android": {
         "default": {
-          "projectId": "psf-publinfo001",
-          "appId": "1:544200957193:android:cef7f012df75e0983dc7d8",
+          "projectId": "app-movil-psf",
+          "appId": "1:637190314536:android:f9eb1628e27eef99a3b31d",
           "fileOutput": "android/app/google-services.json"
         }
       },
@@ -16,9 +16,9 @@
         "lib/firebase_options.dart": {
           "projectId": "app-movil-psf",
           "configurations": {
-            "android": "PENDIENTE_OBTENER_DE_CONSOLE",
-            "web": "PENDIENTE_OBTENER_DE_CONSOLE",
-            "windows": "PENDIENTE_OBTENER_DE_CONSOLE"
+            "android": "1:637190314536:android:f9eb1628e27eef99a3b31d",
+            "web": "1:637190314536:web:16e44fa75acf8bb3a3b31d",
+            "windows": "1:637190314536:web:80883cf8d1c8d45fa3b31d"
           }
         }
       }
