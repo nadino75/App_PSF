@@ -15,14 +15,27 @@ service cloud.firestore {
     match /anuncios/{id} { allow read: if resource.data.publicado == true || admin(); }
     match /boletines/{id} { allow read: if resource.data.publicado == true || admin(); }
     match /novedades/{id} { allow read: if signedIn(); }
-    match /solicitudes/{id} { allow read: if admin() || (signedIn() && resource.data.solicitanteId == request.auth.uid); }
+    match /solicitudes/{id} {
+      allow read: if admin() || (signedIn() && resource.data.solicitanteId == request.auth.uid);
+      // Spark: Cliente crea solicitudes directamente (sin Cloud Function)
+      allow create: if signedIn()
+        && request.resource.data.solicitanteId == request.auth.uid
+        && request.resource.data.tipo in ['negocio', 'cambio', 'anuncio']
+        && request.resource.data.estado == 'pendiente'
+        && request.resource.data.creado == request.time
+        && request.resource.data.actualizado == request.time;
+    }
     match /historial/{id} { allow read: if admin() || (signedIn() && resource.data.solicitanteId == request.auth.uid); }
     match /usuarios/{uid} {
       allow read: if self(uid) || admin();
-      allow create: if self(uid) && request.resource.data.keys().hasOnly(['nombre'])
-        && request.resource.data.nombre is string && request.resource.data.nombre.size() > 0 && request.resource.data.nombre.size() <= 100;
-      allow update: if self(uid) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['nombre'])
-        && request.resource.data.nombre is string && request.resource.data.nombre.size() > 0 && request.resource.data.nombre.size() <= 100;
+      // Spark: Cliente crea usuario directamente (nombre, email, timestamp)
+      allow create: if self(uid) && request.resource.data.keys().hasOnly(['nombre', 'email', 'creado'])
+        && request.resource.data.nombre is string && request.resource.data.nombre.size() > 0 && request.resource.data.nombre.size() <= 100
+        && request.resource.data.email is string
+        && request.resource.data.creado == request.time;
+      allow update: if self(uid) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['nombre', 'dueno'])
+        && request.resource.data.nombre is string && request.resource.data.nombre.size() > 0 && request.resource.data.nombre.size() <= 100
+        && request.resource.data.dueno is bool;
       match /favoritos/{id} {
         allow read, delete: if self(uid);
         allow create: if self(uid) && request.resource.data.keys().hasOnly(['creado'])
