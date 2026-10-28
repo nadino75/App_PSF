@@ -4,19 +4,20 @@
 
 ### Usuario Regular
 - Puede registrarse y crear cuenta
-- Puede explorar catálogo público
-- Puede crear solicitudes de nuevo negocio
-- Puede ver sus propias notificaciones y su auditoría personal
+- Puede explorar catálogo público y ver anuncios
 - Puede marcar favoritos
-- **NO puede**: Resolver solicitudes, editar negocios ajenos, ver auditoría de otros
+- Puede ver sus propias notificaciones y su auditoría personal
+- **NO puede**: Crear negocios, enviar solicitudes, editar nada, ver auditoría de otros
+- **Rol**: Solo observador del catálogo y anuncios
 
 ### Dueño de Negocio
-- Todas las capacidades de usuario regular
-- Puede editar su propio negocio
-- Puede enviar cambios a su negocio (solicitud de cambio)
-- Puede proponer anuncios para su negocio
-- Puede registrarse directamente como dueño al crear cuenta (opción en signup)
-- **NO puede**: Resolver solicitudes, acceder a auditoría global
+- **Opción especial en registro**: Crea usuario + negocio simultáneamente
+- Puede editar su propio negocio (mediante solicitudes de cambio)
+- Puede enviar cambios a su negocio para aprobación
+- Puede crear anuncios para su negocio
+- Puede ver anuncios y catálogo público
+- Puede ver sus propias notificaciones y auditoría personal
+- **NO puede**: Resolver solicitudes, editar negocios ajenos, ver auditoría global, crear otros negocios
 
 ### Administrador
 - Todas las capacidades de dueño
@@ -28,17 +29,50 @@
 - Puede ver auditoría global de todos los usuarios
 - Verificado con custom claim `admin: true` en Firebase Auth
 
+## Diferencia Clave: Usuario vs Dueño
+
+```
+┌─────────────────────────────────────────────────────────┐
+│ USUARIO REGULAR                                         │
+├─────────────────────────────────────────────────────────┤
+│ • Ve catálogo público                                   │
+│ • Ve anuncios                                           │
+│ • Marca favoritos                                       │
+│ • Recibe notificaciones                                 │
+│ • NO puede crear ni poseer negocio                      │
+│ • NO puede enviar solicitudes                           │
+└─────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────┐
+│ DUEÑO DE NEGOCIO                                        │
+├─────────────────────────────────────────────────────────┤
+│ • Posee UN negocio                                      │
+│ • Puede actualizar datos del negocio                    │
+│ • Puede publicar anuncios                               │
+│ • Puede ver solicitudes pendientes                      │
+│ • Ve catálogo y anuncios también                        │
+│ • NO puede crear más negocios                           │
+│ • NO puede aprobar solicitudes (solo admin)             │
+└─────────────────────────────────────────────────────────┘
+```
+
+**Opción en Registro:**
+- "Soy usuario" → Cuenta normal, solo ve ofertas
+- "Soy dueño de negocio" → Cuenta + Negocio automáticamente
+
 ## Matriz de Permisos
 
 | Acción | Usuario | Dueño | Admin |
 |--------|---------|-------|-------|
 | Leer catálogo público | ✓ | ✓ | ✓ |
+| Ver anuncios | ✓ | ✓ | ✓ |
 | Ver su propia auditoría | ✓ | ✓ | ✓ |
 | Ver auditoría global | ✗ | ✗ | ✓ |
 | Registrarse | ✓ | ✓ | ✓ |
-| Crear negocio (solicitud) | ✓ | ✓ | ✓ |
+| **Crear negocio** | **✗** | **✓ (Al registro)** | ✓ |
 | Editar propio negocio | ✗ | ✓ | ✓ |
-| Editar negocio ajeno | ✗ | ✗ | ✓ |
+| Enviar cambios a negocio | ✗ | ✓ | ✓ |
+| Crear anuncios para negocio | ✗ | ✓ | ✓ |
 | Resolver solicitudes | ✗ | ✗ | ✓ |
 | Editar categorías | ✗ | ✗ | ✓ |
 | Crear/publicar boletines | ✗ | ✗ | ✓ |

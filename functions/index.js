@@ -94,7 +94,8 @@ exports.registrarComoDueno = onCall({ region: 'us-central1', maxInstances: 10 },
 exports.enviarSolicitud = call(async (data, auth) => {
   const id = D.identifier(data.id);
   const tipo = data.tipo;
-  D.requireThat(['negocio', 'cambio', 'anuncio'].includes(tipo), 'invalid-argument', 'Tipo inválido.');
+  // Los usuarios regulares NO pueden crear negocios (solo dueños vía registrarComoDueno)
+  D.requireThat(['cambio', 'anuncio'].includes(tipo), 'invalid-argument', 'Tipo inválido. Use registro especial para crear negocio.');
   const propuesta = tipo === 'anuncio' ? D.contentData(data.propuesta, tipo) : D.businessData(data.propuesta);
   const negocioId = tipo === 'negocio' ? id : D.identifier(data.negocioId);
   if (tipo === 'anuncio') D.requireThat(propuesta.negocioId === negocioId, 'invalid-argument', 'Negocio inválido.');

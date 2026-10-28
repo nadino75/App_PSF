@@ -22,7 +22,7 @@ Write-Host ""
 
 # Paso 2: Verificar autenticación
 Write-Host "2️⃣  Verificando autenticación..." -ForegroundColor Cyan
-firebase auth:export .\authBackup.json --project=$ProjectId 2>&1 | Out-Null
+firebase projects:list --project=$ProjectId 2>&1 | Out-Null
 if ($LASTEXITCODE -ne 0) {
     Write-Host "⚠️  No estás autenticado. Ejecutando: firebase login" -ForegroundColor Yellow
     firebase login
