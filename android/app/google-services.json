@@ -1,13 +1,13 @@
 {
   "project_info": {
-    "project_number": "544200957193",
-    "project_id": "psf-publinfo001",
-    "storage_bucket": "psf-publinfo001.firebasestorage.app"
+    "project_number": "637190314536",
+    "project_id": "app-movil-psf",
+    "storage_bucket": "app-movil-psf.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:544200957193:android:cef7f012df75e0983dc7d8",
+        "mobilesdk_app_id": "1:637190314536:android:7f2e38f69a4d59c7a3b31d",
         "android_client_info": {
           "package_name": "com.example.psf_publinfo"
         }
@@ -15,7 +15,26 @@
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyDCRWuGqbLQWTy01TQcCl5pdYWaoeeBOBU"
+          "current_key": "AIzaSyBEuhuvQn6FwT3xmA2VLNG8Vma5RvGe6KE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:637190314536:android:f9eb1628e27eef99a3b31d",
+        "android_client_info": {
+          "package_name": "com.psf.app_movil_psf"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBEuhuvQn6FwT3xmA2VLNG8Vma5RvGe6KE"
         }
       ],
       "services": {
